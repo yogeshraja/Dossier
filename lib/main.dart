@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dossier/data/local/initial_data.dart';
+import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
+import 'package:dossier/features/dossiers/widgets/dossier_list_pane.dart';
+import 'package:dossier/features/cases/widgets/case_intake_pane.dart';
+import 'package:dossier/features/billing_pos/widgets/billing_hub_pane.dart';
+import 'package:dossier/features/media_prep/screens/media_prep_studio_screen.dart';
+import 'package:dossier/features/billing_pos/screens/quick_pos_screen.dart';
+import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,8 +29,9 @@ class DossierApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
+        fontFamily: 'Inter',
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1), // Indigo/Violet accent
+          seedColor: const Color(0xFF6366F1), // Indigo accent
           brightness: Brightness.dark,
           surface: const Color(0xFF0F172A), // Slate 900
         ),
@@ -42,15 +51,26 @@ class DossierApp extends StatelessWidget {
   }
 }
 
-class KioskWorkstationHome extends StatefulWidget {
+class KioskWorkstationHome extends ConsumerStatefulWidget {
   const KioskWorkstationHome({super.key});
 
   @override
-  State<KioskWorkstationHome> createState() => _KioskWorkstationHomeState();
+  ConsumerState<KioskWorkstationHome> createState() => _KioskWorkstationHomeState();
 }
 
-class _KioskWorkstationHomeState extends State<KioskWorkstationHome> {
+class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
   int _selectedTabIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _seedInitialData();
+  }
+
+  Future<void> _seedInitialData() async {
+    final db = ref.read(databaseProvider);
+    await InitialDataSeeder.seedDatabase(db);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,13 +79,13 @@ class _KioskWorkstationHomeState extends State<KioskWorkstationHome> {
     return Scaffold(
       body: Row(
         children: [
-          // Left Navigation Rail for Desktop
+          // Left Navigation Rail for Workstation
           NavigationRail(
             selectedIndex: _selectedTabIndex,
             onDestinationSelected: (idx) => setState(() => _selectedTabIndex = idx),
             backgroundColor: const Color(0xFF0F172A),
             extended: isDesktop,
-            minExtendedWidth: 200,
+            minExtendedWidth: 210,
             leading: Padding(
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
               child: Row(
@@ -82,14 +102,28 @@ class _KioskWorkstationHomeState extends State<KioskWorkstationHome> {
                   ),
                   if (isDesktop) ...[
                     const SizedBox(width: 12),
-                    const Text(
-                      'DOSSIER',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.5,
-                        fontSize: 16,
-                        color: Colors.white,
-                      ),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'DOSSIER',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          'KIOSK VAULT',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                            fontSize: 10,
+                            color: Color(0xFF818CF8),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
@@ -118,7 +152,7 @@ class _KioskWorkstationHomeState extends State<KioskWorkstationHome> {
               ),
             ],
           ),
-          const VerticalDivider(width: 1, thickness: 1),
+          const VerticalDivider(width: 1, thickness: 1, color: Color(0xFF334155)),
 
           // Main Workspace View
           Expanded(
@@ -132,118 +166,37 @@ class _KioskWorkstationHomeState extends State<KioskWorkstationHome> {
   Widget _buildTabContent(int index) {
     switch (index) {
       case 0:
-        return _buildDossierIntakeView();
+        return const _Dossier3PaneWorkspace();
       case 1:
-        return _buildMediaStudioView();
+        return const MediaPrepStudioScreen();
       case 2:
-        return _buildPosBillingView();
+        return const QuickPosScreen();
       case 3:
-        return _buildVaultSyncView();
+        return const VaultSyncScreen();
       default:
         return const SizedBox();
     }
   }
+}
 
-  Widget _buildDossierIntakeView() {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 16,
-            runSpacing: 16,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Customer Dossiers & Case Intake',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Search customer phone number or start instant case intake',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-                  ),
-                ],
-              ),
-              FilledButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.add),
-                label: const Text('New Walk-in Customer'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF6366F1),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Search by customer name, phone number, or case ID...',
-              prefixIcon: const Icon(Icons.search, color: Color(0xFF94A3B8)),
-              filled: true,
-              fillColor: const Color(0xFF1E293B),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF334155)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.badge_outlined, size: 64, color: Colors.grey[600]),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No active case selected',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white70),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Look up an existing customer or tap "New Walk-in Customer" to begin',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+class _Dossier3PaneWorkspace extends StatelessWidget {
+  const _Dossier3PaneWorkspace();
 
-  Widget _buildMediaStudioView() {
-    return const Center(
-      child: Text(
-        'Media Prep Studio (ID Card Stitcher, Compressor & 4x6 Photo Grid)',
-        style: TextStyle(color: Colors.white70, fontSize: 16),
-      ),
-    );
-  }
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        // Pane 1: Customer Dossiers Directory
+        DossierListPane(),
 
-  Widget _buildPosBillingView() {
-    return const Center(
-      child: Text(
-        'POS & Billing (Dynamic UPI QR & ESC/POS Receipt Printer)',
-        style: TextStyle(color: Colors.white70, fontSize: 16),
-      ),
-    );
-  }
+        // Pane 2: Active Case Intake & Stage Progression Stepper
+        Expanded(
+          child: CaseIntakePane(),
+        ),
 
-  Widget _buildVaultSyncView() {
-    return const Center(
-      child: Text(
-        'Vault Sync Engine (BYO Google Drive & Cloudflare R2)',
-        style: TextStyle(color: Colors.white70, fontSize: 16),
-      ),
+        // Pane 3: Billing, Dynamic UPI QR, Thermal Slip & WhatsApp Alerts
+        BillingHubPane(),
+      ],
     );
   }
 }

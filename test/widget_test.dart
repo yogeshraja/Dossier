@@ -4,8 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/main.dart';
 
 void main() {
-  testWidgets('DossierApp launches and displays navigation and intake views', (WidgetTester tester) async {
-    // Set desktop screen dimensions (1200x800)
+  testWidgets('DossierApp launches and renders workstation navigation and panes', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -16,8 +15,15 @@ void main() {
       ),
     );
 
+    // Pump frames to render widget tree
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
     expect(find.text('DOSSIER'), findsOneWidget);
-    expect(find.text('Customer Dossiers & Case Intake'), findsOneWidget);
-    expect(find.text('New Walk-in Customer'), findsOneWidget);
+    expect(find.text('KIOSK VAULT'), findsOneWidget);
+    expect(find.text('Dossiers & Intake'), findsOneWidget);
+    expect(find.text('Media Studio'), findsOneWidget);
+    expect(find.text('POS & Billing'), findsOneWidget);
+    expect(find.text('Vault Sync'), findsOneWidget);
   });
 }
