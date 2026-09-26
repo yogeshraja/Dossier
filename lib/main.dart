@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/app/theme.dart';
 import 'package:dossier/data/local/initial_data.dart';
+import 'package:dossier/features/auth/providers/auth_provider.dart';
+import 'package:dossier/features/auth/screens/auth_screen.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/features/dossiers/widgets/dossier_list_pane.dart';
@@ -13,6 +15,7 @@ import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
 import 'package:dossier/features/settings/screens/settings_screen.dart';
 import 'package:dossier/presentation/screens/splash_screen.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
+import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,12 +65,107 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
     await InitialDataSeeder.seedDatabase(db);
   }
 
+  void _showOperatorMenu(BuildContext context) {
+    final auth = ref.read(authProvider);
+    final currentOp = auth.currentOperator;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => DossierDialog(
+        title: 'Operator Session',
+        icon: Icons.account_circle_rounded,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (currentOp != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: currentOp.role.color,
+                      child: Text(
+                        currentOp.initials,
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(currentOp.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(currentOp.role.label, style: TextStyle(fontSize: 11, color: currentOp.role.color)),
+                          Text(currentOp.phone, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            const Text('Switch Active Operator:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            ...auth.registeredOperators.map((op) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    radius: 13,
+                    backgroundColor: op.role.color,
+                    child: Text(op.initials, style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                  title: Text(op.fullName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  subtitle: Text(op.role.label, style: const TextStyle(fontSize: 10)),
+                  trailing: op.id == currentOp?.id
+                      ? const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18)
+                      : null,
+                  onTap: () {
+                    ref.read(authProvider.notifier).switchOperator(op.id);
+                    Navigator.of(ctx).pop();
+                  },
+                )),
+          ],
+        ),
+        actions: [
+          DossierButton(
+            text: 'Sign Out',
+            variant: DossierButtonVariant.danger,
+            icon: Icons.logout_rounded,
+            size: DossierButtonSize.sm,
+            onPressed: () {
+              ref.read(authProvider.notifier).logout();
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const AuthScreen()),
+              );
+            },
+          ),
+          DossierButton(
+            text: 'Close',
+            variant: DossierButtonVariant.outline,
+            size: DossierButtonSize.sm,
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 1000;
     final isMobile = screenWidth < 640;
     final settings = ref.watch(kioskSettingsProvider);
+    final authState = ref.watch(authProvider);
+    final currentOperator = authState.currentOperator;
 
     if (isMobile) {
       // Mobile Layout with Bottom Navigation Bar
@@ -88,6 +186,19 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
             ],
           ),
           actions: [
+            if (currentOperator != null)
+              IconButton(
+                icon: CircleAvatar(
+                  radius: 12,
+                  backgroundColor: currentOperator.role.color,
+                  child: Text(
+                    currentOperator.initials,
+                    style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                tooltip: 'Operator: ${currentOperator.fullName}',
+                onPressed: () => _showOperatorMenu(context),
+              ),
             IconButton(
               icon: Icon(settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, size: 20),
               tooltip: 'Toggle Theme',
@@ -173,22 +284,68 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
                 alignment: Alignment.bottomCenter,
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
-                  child: isDesktop
-                      ? DossierButton(
-                          text: settings.themeMode == ThemeMode.dark ? 'Light Mode' : 'Dark Mode',
-                          icon: settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                          size: DossierButtonSize.sm,
-                          variant: DossierButtonVariant.outline,
-                          onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
-                        )
-                      : IconButton(
-                          onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
-                          icon: Icon(
-                            settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                            size: 20,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Operator Chip
+                      if (currentOperator != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: InkWell(
+                            onTap: () => _showOperatorMenu(context),
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 12,
+                                    backgroundColor: currentOperator.role.color,
+                                    child: Text(
+                                      currentOperator.initials,
+                                      style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  if (isDesktop) ...[
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        currentOperator.fullName,
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.arrow_drop_down_rounded, size: 18),
+                                  ],
+                                ],
+                              ),
+                            ),
                           ),
-                          tooltip: 'Toggle Theme',
                         ),
+                      isDesktop
+                          ? DossierButton(
+                              text: settings.themeMode == ThemeMode.dark ? 'Light Mode' : 'Dark Mode',
+                              icon: settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                              size: DossierButtonSize.sm,
+                              variant: DossierButtonVariant.outline,
+                              onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
+                            )
+                          : IconButton(
+                              onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
+                              icon: Icon(
+                                settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                                size: 20,
+                              ),
+                              tooltip: 'Toggle Theme',
+                            ),
+                    ],
+                  ),
                 ),
               ),
             ),

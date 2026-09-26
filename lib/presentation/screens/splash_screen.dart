@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/data/local/initial_data.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
+import 'package:dossier/features/auth/providers/auth_provider.dart';
+import 'package:dossier/features/auth/screens/auth_screen.dart';
 import 'package:dossier/main.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -103,13 +105,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
     await Future.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
 
-    _navigateToHome();
+    _navigateToNextScreen();
   }
 
-  void _navigateToHome() {
+  void _navigateToNextScreen() {
+    final isAuthenticated = ref.read(authProvider).isAuthenticated;
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const KioskWorkstationHome(),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            isAuthenticated ? const KioskWorkstationHome() : const AuthScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(
             opacity: animation,

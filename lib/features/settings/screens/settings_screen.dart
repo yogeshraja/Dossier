@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dossier/features/auth/providers/auth_provider.dart';
+import 'package:dossier/features/auth/screens/auth_screen.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/features/settings/widgets/edit_service_dialog.dart';
@@ -446,62 +448,137 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
 
   // --- Tab 3: Kiosk Profile & Hardware / QR Settings ---
   Widget _buildKioskProfileTab(KioskSettings settings, bool isDark) {
+    final authState = ref.watch(authProvider);
+    final currentOp = authState.currentOperator;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: DossierCard(
-        variant: DossierCardVariant.glass,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Active Operator Account Banner
+          DossierCard(
+            variant: DossierCardVariant.elevated,
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.storefront_rounded, size: 18),
-                SizedBox(width: 8),
-                Text('Kiosk Identity & Receipt Details', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.badge_rounded, size: 18, color: Color(0xFF6366F1)),
+                        SizedBox(width: 8),
+                        Text('Current Kiosk Operator', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    if (currentOp != null)
+                      DossierBadge(
+                        label: currentOp.role.label,
+                        variant: DossierBadgeVariant.primary,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (currentOp != null)
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: currentOp.role.color,
+                        child: Text(
+                          currentOp.initials,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(currentOp.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            const SizedBox(height: 2),
+                            Text('Phone: ${currentOp.phone} • PIN: ••••',
+                                style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
+                          ],
+                        ),
+                      ),
+                      DossierButton(
+                        text: 'Sign Out',
+                        icon: Icons.logout_rounded,
+                        variant: DossierButtonVariant.danger,
+                        size: DossierButtonSize.sm,
+                        onPressed: () {
+                          ref.read(authProvider.notifier).logout();
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(builder: (_) => const AuthScreen()),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
               ],
             ),
-            const SizedBox(height: 16),
-            DossierInputField(
-              controller: _kioskNameCtrl,
-              label: 'Kiosk / Cyber Center Name *',
-              hintText: 'e.g. Metro CSC Center',
-              prefixIcon: const Icon(Icons.store_rounded, size: 18),
+          ),
+          const SizedBox(height: 16),
+
+          DossierCard(
+            variant: DossierCardVariant.glass,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.storefront_rounded, size: 18),
+                    SizedBox(width: 8),
+                    Text('Kiosk Identity & Receipt Details', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                DossierInputField(
+                  controller: _kioskNameCtrl,
+                  label: 'Kiosk / Cyber Center Name *',
+                  hintText: 'e.g. Metro CSC Center',
+                  prefixIcon: const Icon(Icons.store_rounded, size: 18),
+                ),
+                const SizedBox(height: 14),
+                DossierInputField(
+                  controller: _kioskPhoneCtrl,
+                  label: 'Public Contact Number *',
+                  hintText: 'e.g. +91 98765 43210',
+                  prefixIcon: const Icon(Icons.phone_rounded, size: 18),
+                ),
+                const SizedBox(height: 14),
+                DossierInputField(
+                  controller: _kioskAddressCtrl,
+                  label: 'Center Physical Address',
+                  hintText: 'e.g. Shop 4, Main Market, Civil Lines',
+                  prefixIcon: const Icon(Icons.location_on_rounded, size: 18),
+                ),
+                const SizedBox(height: 14),
+                DossierInputField(
+                  controller: _upiVpaCtrl,
+                  label: 'Merchant UPI ID *',
+                  hintText: 'e.g. yourshop@oksbi',
+                  prefixIcon: const Icon(Icons.qr_code_rounded, size: 18),
+                ),
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: DossierButton(
+                    text: 'Save Kiosk Profile',
+                    icon: Icons.save_rounded,
+                    variant: DossierButtonVariant.primary,
+                    size: DossierButtonSize.md,
+                    onPressed: _saveKioskProfile,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 14),
-            DossierInputField(
-              controller: _kioskPhoneCtrl,
-              label: 'Public Contact Number *',
-              hintText: 'e.g. +91 98765 43210',
-              prefixIcon: const Icon(Icons.phone_rounded, size: 18),
-            ),
-            const SizedBox(height: 14),
-            DossierInputField(
-              controller: _kioskAddressCtrl,
-              label: 'Center Physical Address',
-              hintText: 'e.g. Shop 4, Main Market, Civil Lines',
-              prefixIcon: const Icon(Icons.location_on_rounded, size: 18),
-            ),
-            const SizedBox(height: 14),
-            DossierInputField(
-              controller: _upiVpaCtrl,
-              label: 'Merchant UPI ID *',
-              hintText: 'e.g. yourshop@oksbi',
-              prefixIcon: const Icon(Icons.qr_code_rounded, size: 18),
-            ),
-            const SizedBox(height: 20),
-            Align(
-              alignment: Alignment.centerRight,
-              child: DossierButton(
-                text: 'Save Kiosk Profile',
-                icon: Icons.save_rounded,
-                variant: DossierButtonVariant.primary,
-                size: DossierButtonSize.md,
-                onPressed: _saveKioskProfile,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

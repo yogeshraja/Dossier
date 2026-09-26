@@ -7,6 +7,8 @@ import 'package:dossier/features/media_prep/screens/media_prep_studio_screen.dar
 import 'package:dossier/features/billing_pos/screens/quick_pos_screen.dart';
 import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
 import 'package:dossier/features/settings/screens/settings_screen.dart';
+import 'package:dossier/features/auth/screens/auth_screen.dart';
+import 'package:dossier/features/auth/providers/auth_provider.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
@@ -302,4 +304,201 @@ void main() {
       expect(find.text('WARNING'), findsOneWidget);
     });
   });
+
+  group('Auth Workflow Tests', () {
+    testWidgets('AuthScreen renders on Desktop (1440x900) with 0 overflows', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('DOSSIER'), findsWidgets);
+      expect(find.text('High-Density Workstation for Cyber Cafes & Service Desks'), findsOneWidget);
+      expect(find.text('Operator Sign-In'), findsOneWidget);
+      expect(find.text('New Kiosk Setup'), findsOneWidget);
+      expect(find.text('100% Offline Local Vault'), findsOneWidget);
+    });
+
+    testWidgets('AuthScreen renders on Mobile (390x844) with 0 overflows', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('DOSSIER'), findsWidgets);
+      expect(find.text('Operator Sign-In'), findsOneWidget);
+      expect(find.text('New Kiosk Setup'), findsOneWidget);
+    });
+
+    testWidgets('AuthScreen renders on Tablet (768x1024) with 0 overflows', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(768, 1024);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('DOSSIER'), findsWidgets);
+      expect(find.text('Operator Sign-In'), findsOneWidget);
+    });
+
+    testWidgets('AuthScreen renders on Small Mobile (320x600) with 0 overflows', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(320, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('DOSSIER'), findsWidgets);
+      expect(find.text('Operator Sign-In'), findsOneWidget);
+    });
+
+    testWidgets('AuthScreen switches between Sign-In and Sign-Up tabs', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Switch to New Kiosk Setup
+      await tester.tap(find.text('New Kiosk Setup'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Register Kiosk & Master Operator'), findsOneWidget);
+      expect(find.text('CSC / Kiosk Business Name'), findsOneWidget);
+      expect(find.text('Master Operator Name'), findsOneWidget);
+
+      // Switch back to Sign-In
+      await tester.tap(find.text('Operator Sign-In'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Enter Credentials'), findsOneWidget);
+    });
+
+    testWidgets('AuthScreen switches to PIN pad mode and handles keypad taps', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Switch to PIN mode
+      await tester.tap(find.byIcon(Icons.dialpad_rounded));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Quick PIN Unlock'), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.text('3'), findsOneWidget);
+
+      // Tap PIN digits 1-2-3-4
+      await tester.tap(find.text('1'));
+      await tester.pump();
+      await tester.tap(find.text('2'));
+      await tester.pump();
+      await tester.tap(find.text('3'));
+      await tester.pump();
+      await tester.tap(find.text('4'));
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+
+    test('AuthNotifier signs in with credentials, registers operator, and manages PIN unlock', () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(authProvider.notifier);
+
+      // Initial state
+      expect(container.read(authProvider).isAuthenticated, isFalse);
+      expect(container.read(authProvider).registeredOperators.length, 2);
+
+      // Sign In with valid credentials
+      final success = await notifier.signInWithCredentials(
+        identifier: '9876543210',
+        password: 'admin123',
+      );
+      expect(success, isTrue);
+      expect(container.read(authProvider).isAuthenticated, isTrue);
+      expect(container.read(authProvider).currentOperator?.fullName, 'Ramesh Sharma');
+
+      // Lock session and unlock with PIN
+      notifier.lockSession();
+      expect(container.read(authProvider).isPinLocked, isTrue);
+
+      final unlocked = notifier.unlockSession('1234');
+      expect(unlocked, isTrue);
+      expect(container.read(authProvider).isPinLocked, isFalse);
+
+      // Sign up new operator
+      final regSuccess = await notifier.signUp(
+        kioskName: 'Tech Seva Center',
+        operatorName: 'Amit Patel',
+        phone: '9988776655',
+        password: 'secretpassword',
+        pin: '9876',
+      );
+      expect(regSuccess, isTrue);
+      expect(container.read(authProvider).registeredOperators.length, 3);
+      expect(container.read(authProvider).currentOperator?.fullName, 'Amit Patel');
+
+      // Logout
+      notifier.logout();
+      expect(container.read(authProvider).isAuthenticated, isFalse);
+      expect(container.read(authProvider).currentOperator, isNull);
+    });
+  });
 }
+
