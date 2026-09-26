@@ -5,6 +5,10 @@ import 'package:drift/drift.dart' as drift;
 import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
+import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
+import 'package:dossier/presentation/common_widgets/dossier_card.dart';
+import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
+import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:uuid/uuid.dart';
 
 class EditServiceDialog extends ConsumerStatefulWidget {
@@ -161,230 +165,199 @@ class _EditServiceDialogState extends ConsumerState<EditServiceDialog> {
     final currencySymbol = ref.watch(kioskSettingsProvider).currencySymbol;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Dialog(
-      backgroundColor: Theme.of(context).cardTheme.color,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 680,
-        constraints: const BoxConstraints(maxHeight: 750),
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.settings_suggest_rounded, color: Theme.of(context).colorScheme.primary),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    widget.existingService != null ? 'Edit Service & Cost Breakdown' : 'Create New Custom Service',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.grey),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
+    return DossierDialog(
+      title: widget.existingService != null ? 'Edit Service & Cost Breakdown' : 'Create New Custom Service',
+      subtitle: 'Configure pricing, pass-through fees and document requirements',
+      icon: Icons.settings_suggest_rounded,
+      maxWidth: 700,
+      content: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Service Name
+            DossierInputField(
+              controller: _nameController,
+              label: 'Service Name *',
+              hintText: 'e.g. Fresh Passport Seva Application',
+              prefixIcon: const Icon(Icons.badge_rounded, size: 18),
+              showClearButton: true,
+              validator: (val) => val == null || val.trim().isEmpty ? 'Service name is required' : null,
+            ),
+            const SizedBox(height: 16),
+
+            // Category Dropdown
+            Text(
+              'Service Category',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
               ),
-              const Divider(height: 24),
+            ),
+            const SizedBox(height: 6),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedCategory,
+              dropdownColor: Theme.of(context).cardTheme.color,
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.category_rounded, size: 18),
+              ),
+              items: _availableCategories.map((c) {
+                return DropdownMenuItem<String>(
+                  value: c['key'],
+                  child: Text(c['label']!, style: const TextStyle(fontSize: 13.5)),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _selectedCategory = val);
+              },
+            ),
+            const SizedBox(height: 16),
 
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            // Cost Breakup Section
+            DossierCard(
+              variant: DossierCardVariant.flat,
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Granular Cost & Margin Breakup', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 12),
+                  Row(
                     children: [
-                      // Service Name
-                      TextFormField(
-                        controller: _nameController,
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                        decoration: const InputDecoration(
-                          labelText: 'Service Name *',
-                          hintText: 'e.g. Fresh Passport Seva Application',
-                          prefixIcon: Icon(Icons.badge_rounded),
-                        ),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'Service name is required' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Category Dropdown
-                      DropdownButtonFormField<String>(
-                        value: _selectedCategory,
-                        dropdownColor: Theme.of(context).cardTheme.color,
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                        decoration: const InputDecoration(
-                          labelText: 'Service Category',
-                          prefixIcon: Icon(Icons.category_rounded),
-                        ),
-                        items: _availableCategories.map((c) {
-                          return DropdownMenuItem<String>(
-                            value: c['key'],
-                            child: Text(c['label']!, style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => _selectedCategory = val);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Cost Breakup Section
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Theme.of(context).dividerColor),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Granular Cost & Margin Breakup', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _portalFeeController,
-                                    keyboardType: TextInputType.number,
-                                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                                    decoration: InputDecoration(
-                                      labelText: 'Govt Portal Cost ($currencySymbol)',
-                                      helperText: 'Pass-through fee paid to govt portal',
-                                      prefixText: '$currencySymbol ',
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _serviceFeeController,
-                                    keyboardType: TextInputType.number,
-                                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                                    decoration: InputDecoration(
-                                      labelText: 'Kiosk Counter Profit ($currencySymbol)',
-                                      helperText: 'Your shop fee for processing / typing',
-                                      prefixText: '$currencySymbol ',
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Required Documents Checklist Manager
-                      const Text(
-                        'Required Documents Checklist (Auto-merged into Case Intake):',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Selected Doc Chips
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _requiredDocs.map((doc) {
-                          return Chip(
-                            label: Text(doc, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                            side: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)),
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            onDeleted: () => setState(() => _requiredDocs.remove(doc)),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Add Custom Doc Tag
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _newDocController,
-                              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                              decoration: const InputDecoration(
-                                hintText: 'Type custom document name (e.g. Birth Certificate)...',
-                                isDense: true,
+                      Expanded(
+                        child: DossierInputField(
+                          controller: _portalFeeController,
+                          keyboardType: TextInputType.number,
+                          label: 'Govt Portal Cost ($currencySymbol)',
+                          helperText: 'Pass-through fee paid to portal',
+                          prefixIcon: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Center(
+                              child: Text(
+                                currencySymbol,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                               ),
-                              onSubmitted: (_) => _addCustomDoc(),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          FilledButton.icon(
-                            onPressed: _addCustomDoc,
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Add Doc'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Quick Preset Document Adders
-                      const Text('Quick Add Presets:', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: _commonDocPresets.where((p) => !_requiredDocs.contains(p)).map((preset) {
-                          return ActionChip(
-                            label: Text('+ $preset', style: const TextStyle(fontSize: 11)),
-                            onPressed: () => _togglePresetDoc(preset),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Archive Status Switch
-                      if (widget.existingService != null)
-                        SwitchListTile(
-                          title: const Text('Archive / Disable this service'),
-                          subtitle: const Text('Archived services will not appear in walk-in case selector'),
-                          value: _isArchived,
-                          onChanged: (val) => setState(() => _isArchived = val),
                         ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: DossierInputField(
+                          controller: _serviceFeeController,
+                          keyboardType: TextInputType.number,
+                          label: 'Kiosk Counter Profit ($currencySymbol)',
+                          helperText: 'Your shop fee for processing',
+                          prefixIcon: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Center(
+                              child: Text(
+                                currencySymbol,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF10B981)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                ),
-              ),
-              const Divider(height: 24),
-
-              // Actions
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: _isSaving ? null : _handleSave,
-                    icon: _isSaving
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.check),
-                    label: Text(widget.existingService != null ? 'Save Changes' : 'Create Service'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    ),
-                  ),
                 ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 18),
+
+            // Required Documents Checklist Manager
+            const Text(
+              'Required Documents Checklist (Auto-merged into Case Intake):',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+            ),
+            const SizedBox(height: 8),
+
+            // Selected Doc Chips
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _requiredDocs.map((doc) {
+                return Chip(
+                  label: Text(doc, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                  side: BorderSide(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  onDeleted: () => setState(() => _requiredDocs.remove(doc)),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+
+            // Add Custom Doc Tag
+            Row(
+              children: [
+                Expanded(
+                  child: DossierInputField(
+                    controller: _newDocController,
+                    hintText: 'Type custom document name (e.g. Birth Certificate)...',
+                    onFieldSubmitted: (_) => _addCustomDoc(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                DossierButton(
+                  text: 'Add Doc',
+                  icon: Icons.add_rounded,
+                  variant: DossierButtonVariant.secondary,
+                  size: DossierButtonSize.md,
+                  onPressed: _addCustomDoc,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Quick Preset Document Adders
+            const Text('Quick Add Presets:', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _commonDocPresets.where((p) => !_requiredDocs.contains(p)).map((preset) {
+                return ActionChip(
+                  label: Text('+ $preset', style: const TextStyle(fontSize: 11)),
+                  onPressed: () => _togglePresetDoc(preset),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            // Archive Status Switch
+            if (widget.existingService != null)
+              SwitchListTile(
+                title: const Text('Archive / Disable this service', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Archived services will not appear in walk-in case selector', style: TextStyle(fontSize: 12)),
+                value: _isArchived,
+                onChanged: (val) => setState(() => _isArchived = val),
+              ),
+          ],
         ),
       ),
+      actions: [
+        DossierButton(
+          text: 'Cancel',
+          variant: DossierButtonVariant.ghost,
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        const SizedBox(width: 10),
+        DossierButton(
+          text: widget.existingService != null ? 'Save Changes' : 'Create Service',
+          variant: DossierButtonVariant.primary,
+          icon: Icons.check_rounded,
+          isLoading: _isSaving,
+          onPressed: _handleSave,
+        ),
+      ],
     );
   }
 }

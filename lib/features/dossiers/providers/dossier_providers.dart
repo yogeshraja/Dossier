@@ -32,7 +32,7 @@ final activeDossierProvider = Provider<Dossier?>((ref) {
       return dossiers.where((d) => d.id == activeId).firstOrNull ?? (dossiers.isNotEmpty ? dossiers.first : null);
     },
     loading: () => null,
-    error: (_, __) => null,
+    error: (_, _) => null,
   );
 });
 
@@ -58,7 +58,7 @@ final activeCaseProvider = Provider<Case?>((ref) {
       return cases.where((c) => c.id == activeCaseId).firstOrNull ?? (cases.isNotEmpty ? cases.first : null);
     },
     loading: () => null,
-    error: (_, __) => null,
+    error: (_, _) => null,
   );
 });
 

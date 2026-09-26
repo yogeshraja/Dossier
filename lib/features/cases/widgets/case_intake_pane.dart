@@ -5,6 +5,11 @@ import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/features/cases/widgets/new_case_dialog.dart';
+import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
+import 'package:dossier/presentation/common_widgets/dossier_card.dart';
+import 'package:dossier/presentation/common_widgets/dossier_button.dart';
+import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
+import 'package:dossier/presentation/common_widgets/dossier_panel.dart';
 import 'package:uuid/uuid.dart';
 
 class CaseIntakePane extends ConsumerWidget {
@@ -69,12 +74,23 @@ class CaseIntakePane extends ConsumerWidget {
     final exhibitsAsync = ref.watch(activeCaseExhibitsStreamProvider);
     final isBillingExpanded = ref.watch(isBillingHubExpandedProvider);
     final settings = ref.watch(kioskSettingsProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (activeDossier == null) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24.0),
-          child: Text('Select a customer dossier from the directory to view cases', style: TextStyle(color: Colors.grey)),
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.folder_shared_outlined, size: 48, color: Colors.grey[500]),
+              const SizedBox(height: 12),
+              Text(
+                'Select a customer dossier from the directory to view or create cases',
+                style: TextStyle(color: Colors.grey[500], fontSize: 13.5),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -83,7 +99,7 @@ class CaseIntakePane extends ConsumerWidget {
       color: Theme.of(context).scaffoldBackgroundColor,
       child: Column(
         children: [
-          // Customer Profile Banner (Wrap / Adaptive)
+          // Customer Profile Banner
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -99,12 +115,18 @@ class CaseIntakePane extends ConsumerWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      child: Text(
-                        activeDossier.fullName.isNotEmpty ? activeDossier.fullName[0].toUpperCase() : '?',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          activeDossier.fullName.isNotEmpty ? activeDossier.fullName[0].toUpperCase() : '?',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -119,17 +141,14 @@ class CaseIntakePane extends ConsumerWidget {
                               activeDossier.fullName,
                               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                             ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text('ACTIVE', style: TextStyle(color: Color(0xFF10B981), fontSize: 9, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 8),
+                            const DossierBadge(
+                              label: 'ACTIVE',
+                              variant: DossierBadgeVariant.success,
                             ),
                           ],
                         ),
+                        const SizedBox(height: 2),
                         Text(
                           'Phone: ${activeDossier.phoneNumber}',
                           style: TextStyle(fontSize: 12, color: Colors.grey[500]),
@@ -141,26 +160,26 @@ class CaseIntakePane extends ConsumerWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FilledButton.icon(
+                    DossierButton(
+                      text: 'New Case Intake',
+                      icon: Icons.add_rounded,
+                      size: DossierButtonSize.sm,
+                      variant: DossierButtonVariant.primary,
                       onPressed: () {
-                        showDialog(
+                        DossierDialog.show(
                           context: context,
                           builder: (_) => NewCaseDialog(customer: activeDossier),
                         );
                       },
-                      icon: const Icon(Icons.add, size: 15),
-                      label: const Text('New Case Intake', style: TextStyle(fontSize: 12)),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      ),
                     ),
                     if (!isBillingExpanded) ...[
                       const SizedBox(width: 8),
-                      IconButton.filledTonal(
+                      DossierButton(
+                        text: 'Billing Hub',
+                        icon: Icons.point_of_sale_rounded,
+                        size: DossierButtonSize.sm,
+                        variant: DossierButtonVariant.secondary,
                         onPressed: () => ref.read(isBillingHubExpandedProvider.notifier).state = true,
-                        icon: const Icon(Icons.point_of_sale_rounded, size: 16),
-                        tooltip: 'Expand Billing & QR Hub',
-                        visualDensity: VisualDensity.compact,
                       ),
                     ],
                   ],
@@ -183,8 +202,8 @@ class CaseIntakePane extends ConsumerWidget {
                           Icon(Icons.folder_open_rounded, size: 48, color: Colors.grey[500]),
                           const SizedBox(height: 10),
                           const Text('No active cases for this customer', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 4),
-                          Text('Tap "New Case Intake" above to start a service application', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                          const SizedBox(height: 6),
+                          Text('Tap "New Case Intake" above to start a service application', style: TextStyle(color: Colors.grey[500], fontSize: 12.5)),
                         ],
                       ),
                     ),
@@ -195,24 +214,33 @@ class CaseIntakePane extends ConsumerWidget {
                 return Column(
                   children: [
                     Container(
-                      height: 44,
-                      color: Theme.of(context).colorScheme.surface,
+                      height: 48,
+                      color: isDark ? const Color(0xFF0F172A) : Colors.white,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                         itemCount: cases.length,
-                        separatorBuilder: (context, _) => const SizedBox(width: 6),
+                        separatorBuilder: (context, _) => const SizedBox(width: 8),
                         itemBuilder: (context, index) {
                           final c = cases[index];
                           final isSelected = activeCase?.id == c.id;
 
                           return ChoiceChip(
-                            label: Text(c.title, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.grey[500])),
+                            label: Text(
+                              c.title,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                              ),
+                            ),
                             selected: isSelected,
                             onSelected: (_) => ref.read(activeCaseIdProvider.notifier).state = c.id,
                             selectedColor: Theme.of(context).colorScheme.primary,
                             visualDensity: VisualDensity.compact,
-                            side: BorderSide(color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor),
+                            side: BorderSide(
+                              color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
+                            ),
                           );
                         },
                       ),
@@ -265,14 +293,10 @@ class CaseIntakePane extends ConsumerWidget {
                               ),
                               const SizedBox(height: 16),
 
-                              // Financial Overview Card (Responsive Wrap / Grid)
-                              Container(
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).cardTheme.color,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Theme.of(context).dividerColor),
-                                ),
+                              // Financial Overview Card
+                              DossierCard(
+                                variant: DossierCardVariant.glass,
+                                padding: const EdgeInsets.all(16),
                                 child: Wrap(
                                   alignment: WrapAlignment.spaceAround,
                                   runAlignment: WrapAlignment.center,
@@ -293,116 +317,115 @@ class CaseIntakePane extends ConsumerWidget {
                               ),
                               const SizedBox(height: 20),
 
-                              // Document Exhibits Slot Manager
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Case Exhibits & Artifacts', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                                  TextButton.icon(
+                              // Document Exhibits Slot Manager via DossierPanel
+                              DossierPanel(
+                                title: 'Case Exhibits & Scanned Artifacts',
+                                subtitle: 'Local encrypted document cache',
+                                leading: const Icon(Icons.inventory_2_rounded, size: 18, color: Color(0xFF6366F1)),
+                                badge: exhibitsAsync.maybeWhen(
+                                  data: (ex) => DossierBadge(label: '${ex.length}', variant: DossierBadgeVariant.neutral),
+                                  orElse: () => null,
+                                ),
+                                actions: [
+                                  DossierButton(
+                                    text: 'Attach Scanned Doc',
+                                    icon: Icons.attach_file_rounded,
+                                    size: DossierButtonSize.sm,
+                                    variant: DossierButtonVariant.ghost,
                                     onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'ATTACHMENT'),
-                                    icon: const Icon(Icons.attach_file, size: 14),
-                                    label: const Text('Attach Scanned Doc', style: TextStyle(fontSize: 12)),
                                   ),
                                 ],
-                              ),
-                              const SizedBox(height: 8),
-
-                              exhibitsAsync.when(
-                                data: (exhibits) {
-                                  if (exhibits.isEmpty) {
-                                    return Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context).cardTheme.color?.withValues(alpha: 0.5),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: Theme.of(context).dividerColor),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Icon(Icons.cloud_upload_outlined, size: 32, color: Colors.grey[500]),
-                                          const SizedBox(height: 6),
-                                          const Text('No exhibits attached yet', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                          const SizedBox(height: 8),
-                                          Wrap(
-                                            spacing: 6,
-                                            runSpacing: 6,
-                                            children: [
-                                              OutlinedButton.icon(
-                                                onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'AADHAAR_FRONT'),
-                                                icon: const Icon(Icons.badge, size: 12),
-                                                label: const Text('+ Aadhaar Front', style: TextStyle(fontSize: 11)),
-                                              ),
-                                              OutlinedButton.icon(
-                                                onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'PASSPORT_PHOTO'),
-                                                icon: const Icon(Icons.photo, size: 12),
-                                                label: const Text('+ Photo', style: TextStyle(fontSize: 11)),
-                                              ),
-                                              OutlinedButton.icon(
-                                                onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'SIGNATURE'),
-                                                icon: const Icon(Icons.draw, size: 12),
-                                                label: const Text('+ Sign', style: TextStyle(fontSize: 11)),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }
-
-                                  return ListView.separated(
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    itemCount: exhibits.length,
-                                    separatorBuilder: (context, _) => const SizedBox(height: 6),
-                                    itemBuilder: (context, index) {
-                                      final ex = exhibits[index];
+                                child: exhibitsAsync.when(
+                                  data: (exhibits) {
+                                    if (exhibits.isEmpty) {
                                       return Container(
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context).cardTheme.color,
-                                          borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(color: Theme.of(context).dividerColor),
-                                        ),
-                                        child: Row(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
                                           children: [
-                                            Container(
-                                              padding: const EdgeInsets.all(6),
-                                              decoration: BoxDecoration(
-                                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              child: Icon(Icons.image_rounded, color: Theme.of(context).colorScheme.primary, size: 18),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(ex.fileName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                                  Text(
-                                                    '${ex.slotType} • ${(ex.fileSizeBytes / 1024).toStringAsFixed(0)} KB',
-                                                    style: TextStyle(color: Colors.grey[500], fontSize: 10),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: const Text('READY', style: TextStyle(color: Color(0xFF10B981), fontSize: 9, fontWeight: FontWeight.bold)),
+                                            Icon(Icons.cloud_upload_outlined, size: 32, color: Colors.grey[500]),
+                                            const SizedBox(height: 6),
+                                            const Text('No exhibits attached yet', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                            const SizedBox(height: 10),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                DossierButton(
+                                                  text: '+ Aadhaar Front',
+                                                  icon: Icons.badge_rounded,
+                                                  size: DossierButtonSize.sm,
+                                                  variant: DossierButtonVariant.outline,
+                                                  onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'AADHAAR_FRONT'),
+                                                ),
+                                                DossierButton(
+                                                  text: '+ Photo',
+                                                  icon: Icons.photo_camera_front_rounded,
+                                                  size: DossierButtonSize.sm,
+                                                  variant: DossierButtonVariant.outline,
+                                                  onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'PASSPORT_PHOTO'),
+                                                ),
+                                                DossierButton(
+                                                  text: '+ Signature',
+                                                  icon: Icons.draw_rounded,
+                                                  size: DossierButtonSize.sm,
+                                                  variant: DossierButtonVariant.outline,
+                                                  onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'SIGNATURE'),
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
                                       );
-                                    },
-                                  );
-                                },
-                                loading: () => const Center(child: CircularProgressIndicator()),
-                                error: (err, _) => Text('Error loading exhibits: $err'),
+                                    }
+
+                                    return ListView.separated(
+                                      shrinkWrap: true,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      itemCount: exhibits.length,
+                                      separatorBuilder: (context, _) => const SizedBox(height: 8),
+                                      itemBuilder: (context, index) {
+                                        final ex = exhibits[index];
+                                        return DossierCard(
+                                          variant: DossierCardVariant.flat,
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          borderRadius: 10,
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(6),
+                                                decoration: BoxDecoration(
+                                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                                child: Icon(Icons.image_rounded, color: Theme.of(context).colorScheme.primary, size: 18),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(ex.fileName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                                    Text(
+                                                      '${ex.slotType} • ${(ex.fileSizeBytes / 1024).toStringAsFixed(0)} KB',
+                                                      style: TextStyle(color: Colors.grey[500], fontSize: 10.5),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              const DossierBadge(
+                                                label: 'READY',
+                                                variant: DossierBadgeVariant.success,
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                  loading: () => const Center(child: CircularProgressIndicator()),
+                                  error: (err, _) => Text('Error loading exhibits: $err'),
+                                ),
                               ),
                             ],
                           ),

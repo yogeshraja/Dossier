@@ -27,7 +27,9 @@ class AppThemes {
         ),
       ),
       dividerColor: const Color(0xFF334155),
-      dialogBackgroundColor: const Color(0xFF1E293B),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: Color(0xFF1E293B),
+      ),
       navigationRailTheme: const NavigationRailThemeData(
         backgroundColor: Color(0xFF0F172A),
         selectedIconTheme: IconThemeData(color: Color(0xFF818CF8)),
@@ -82,7 +84,9 @@ class AppThemes {
         ),
       ),
       dividerColor: const Color(0xFFE2E8F0),
-      dialogBackgroundColor: const Color(0xFFFFFFFF),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: Color(0xFFFFFFFF),
+      ),
       navigationRailTheme: const NavigationRailThemeData(
         backgroundColor: Color(0xFFFFFFFF),
         selectedIconTheme: IconThemeData(color: Color(0xFF4F46E5)),

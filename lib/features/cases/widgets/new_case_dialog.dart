@@ -5,6 +5,11 @@ import 'package:drift/drift.dart' as drift;
 import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
+import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
+import 'package:dossier/presentation/common_widgets/dossier_card.dart';
+import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
+import 'package:dossier/presentation/common_widgets/dossier_button.dart';
+import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 import 'package:uuid/uuid.dart';
 
 class NewCaseDialog extends ConsumerStatefulWidget {
@@ -167,29 +172,28 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
     final servicesAsync = ref.watch(activeServicesStreamProvider);
     final settings = ref.watch(kioskSettingsProvider);
 
-    return Dialog(
-      backgroundColor: Theme.of(context).cardTheme.color,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 650,
-        constraints: const BoxConstraints(maxHeight: 700),
-        padding: const EdgeInsets.all(24),
-        child: servicesAsync.when(
-          data: (services) {
-            // Filter by active categories opt-in
-            final filteredServices = services
-                .where((s) => !s.isArchived && settings.activeCategories.contains(s.category))
-                .toList();
-            return _buildContent(filteredServices, settings);
-          },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, _) => Center(child: Text('Error loading services: $err')),
+    return DossierDialog(
+      title: 'Start New Job / Case Intake',
+      subtitle: 'Customer: ${widget.customer.fullName} (${widget.customer.phoneNumber})',
+      icon: Icons.post_add_rounded,
+      maxWidth: 680,
+      content: servicesAsync.when(
+        data: (services) {
+          final filteredServices = services
+              .where((s) => !s.isArchived && settings.activeCategories.contains(s.category))
+              .toList();
+          return _buildFormContent(filteredServices, settings);
+        },
+        loading: () => const Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Center(child: CircularProgressIndicator()),
         ),
+        error: (err, _) => Center(child: Text('Error loading services: $err')),
       ),
     );
   }
 
-  Widget _buildContent(List<Service> services, KioskSettings settings) {
+  Widget _buildFormContent(List<Service> services, KioskSettings settings) {
     double totalPortal = 0;
     double totalService = 0;
     final Set<String> requiredDocsUnion = {};
@@ -209,59 +213,44 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
     final grandTotal = totalPortal + totalService;
 
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
+        DossierInputField(
+          controller: _titleController,
+          label: 'Case Title / Job Description',
+          hintText: 'e.g. Fresh PAN Card Application + 2 Xerox',
+          prefixIcon: const Icon(Icons.edit_note_rounded, size: 20),
+          showClearButton: true,
+        ),
+        const SizedBox(height: 18),
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(Icons.post_add_rounded, color: Theme.of(context).colorScheme.primary),
+            const Text(
+              'Select Services to Attach:',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Start New Job / Case Intake',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    'Customer: ${widget.customer.fullName} (${widget.customer.phoneNumber})',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[500]),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.grey),
-              onPressed: () => Navigator.of(context).pop(),
+            DossierBadge(
+              label: '${_selectedServiceIds.length} Selected',
+              variant: _selectedServiceIds.isNotEmpty ? DossierBadgeVariant.primary : DossierBadgeVariant.neutral,
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _titleController,
-          decoration: const InputDecoration(
-            labelText: 'Case Title / Job Description',
-            hintText: 'e.g. Fresh PAN Card Application + 2 Xerox',
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Select Services (Check all that apply):',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
         const SizedBox(height: 8),
-        Expanded(
+
+        // Services list
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 240),
           child: services.isEmpty
-              ? const Center(child: Text('No active services in selected categories. Check Settings to enable categories.'))
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text('No active services found in enabled categories.'),
+                  ),
+                )
               : ListView.separated(
+                  shrinkWrap: true,
                   itemCount: services.length,
                   separatorBuilder: (context, _) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
@@ -269,125 +258,137 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
                     final isSelected = _selectedServiceIds.contains(s.id);
                     final qty = _serviceQuantities[s.id] ?? 1;
 
-                    return InkWell(
+                    return DossierCard(
                       onTap: () => _toggleService(s),
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isSelected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : Theme.of(context).colorScheme.surface,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
+                      isSelected: isSelected,
+                      variant: isSelected ? DossierCardVariant.glass : DossierCardVariant.flat,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      borderRadius: 10,
+                      child: Row(
+                        children: [
+                          Icon(
+                            isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                            color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey,
+                            size: 20,
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                              color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    s.name,
-                                    style: TextStyle(
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                    ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.name,
+                                  style: TextStyle(
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                    fontSize: 13.5,
                                   ),
-                                  Text(
-                                    'Portal: ${settings.currencySymbol}${s.defaultPortalFee.toStringAsFixed(0)} | Shop: ${settings.currencySymbol}${s.defaultServiceFee.toStringAsFixed(0)}',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Portal: ${settings.currencySymbol}${s.defaultPortalFee.toStringAsFixed(0)} | Shop: ${settings.currencySymbol}${s.defaultServiceFee.toStringAsFixed(0)}',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                                ),
+                              ],
                             ),
-                            if (isSelected) ...[
-                              IconButton(
-                                icon: const Icon(Icons.remove_circle_outline, size: 20, color: Colors.grey),
-                                onPressed: () {
-                                  if (qty > 1) {
-                                    setState(() => _serviceQuantities[s.id] = qty - 1);
-                                  }
-                                },
-                              ),
-                              Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              IconButton(
-                                icon: const Icon(Icons.add_circle_outline, size: 20, color: Colors.grey),
-                                onPressed: () {
-                                  setState(() => _serviceQuantities[s.id] = qty + 1);
-                                },
-                              ),
-                            ],
-                            Text(
-                              '${settings.currencySymbol}${((s.defaultPortalFee + s.defaultServiceFee) * qty).toStringAsFixed(0)}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontSize: 15),
+                          ),
+                          if (isSelected) ...[
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline, size: 18),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () {
+                                if (qty > 1) {
+                                  setState(() => _serviceQuantities[s.id] = qty - 1);
+                                }
+                              },
                             ),
+                            Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle_outline, size: 18),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () {
+                                setState(() => _serviceQuantities[s.id] = qty + 1);
+                              },
+                            ),
+                            const SizedBox(width: 6),
                           ],
-                        ),
+                          Text(
+                            '${settings.currencySymbol}${((s.defaultPortalFee + s.defaultServiceFee) * qty).toStringAsFixed(0)}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontSize: 14),
+                          ),
+                        ],
                       ),
                     );
                   },
                 ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
 
         // Live Margin & Checklist summary
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Theme.of(context).dividerColor),
-          ),
+        DossierCard(
+          variant: DossierCardVariant.flat,
+          padding: const EdgeInsets.all(12),
+          borderRadius: 10,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Pass-through Cost: ${settings.currencySymbol}${totalPortal.toStringAsFixed(0)}', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-                  Text('Kiosk Profit: ${settings.currencySymbol}${totalService.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
-                  Text('Total Estimate: ${settings.currencySymbol}${grandTotal.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text('Portal Fee: ${settings.currencySymbol}${totalPortal.toStringAsFixed(0)}', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                  Text('Kiosk Profit: ${settings.currencySymbol}${totalService.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12)),
+                  Text('Total Estimate: ${settings.currencySymbol}${grandTotal.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 ],
               ),
               if (requiredDocsUnion.isNotEmpty) ...[
-                Divider(height: 16, color: Theme.of(context).dividerColor),
-                Text(
-                  'Auto-Merged Document Checklist: ${requiredDocsUnion.join(" • ")}',
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
+                const Divider(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.checklist_rounded, size: 16, color: Color(0xFF6366F1)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Docs Required: ${requiredDocsUnion.join(" • ")}',
+                        style: const TextStyle(fontSize: 11.5, color: Color(0xFF818CF8), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
 
         Row(
           children: [
             Expanded(
-              child: TextField(
+              child: DossierInputField(
                 controller: _advanceController,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  labelText: 'Advance Collected (${settings.currencySymbol})',
-                  hintText: 'e.g. 100',
-                  prefixText: '${settings.currencySymbol} ',
+                label: 'Advance Deposit Collected',
+                hintText: '0',
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Center(
+                    child: Text(
+                      settings.currencySymbol,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 16),
-            FilledButton.icon(
-              onPressed: _isSaving ? null : () => _handleCreateCase(services),
-              icon: _isSaving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.check_circle_outline),
-              label: const Text('Create Case & Print Token'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            const SizedBox(width: 14),
+            Padding(
+              padding: const EdgeInsets.only(top: 22.0),
+              child: DossierButton(
+                text: 'Create Case & Print Token',
+                icon: Icons.check_circle_rounded,
+                variant: DossierButtonVariant.primary,
+                size: DossierButtonSize.lg,
+                isLoading: _isSaving,
+                onPressed: _isSaving ? null : () => _handleCreateCase(services),
               ),
             ),
           ],

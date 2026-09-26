@@ -5,6 +5,9 @@ import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/domain/services/upi_qr_service.dart';
 import 'package:dossier/domain/services/whatsapp_notification_service.dart';
+import 'package:dossier/presentation/common_widgets/dossier_card.dart';
+import 'package:dossier/presentation/common_widgets/dossier_button.dart';
+import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 
 class BillingHubPane extends ConsumerWidget {
   const BillingHubPane({super.key});
@@ -16,7 +19,6 @@ class BillingHubPane extends ConsumerWidget {
     final isExpanded = ref.watch(isBillingHubExpandedProvider);
     final settings = ref.watch(kioskSettingsProvider);
 
-    // If collapsed, render nothing (or a thin collapsible bar)
     if (!isExpanded) {
       return const SizedBox.shrink();
     }
@@ -30,7 +32,6 @@ class BillingHubPane extends ConsumerWidget {
         ),
         child: Column(
           children: [
-            // Header with Collapse Button
             _buildHeader(context, ref),
             Expanded(
               child: Center(
@@ -41,10 +42,13 @@ class BillingHubPane extends ConsumerWidget {
                     children: [
                       Icon(Icons.point_of_sale_rounded, size: 48, color: Colors.grey[600]),
                       const SizedBox(height: 12),
-                      const Text('Billing & Quick Dispatch', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text('Select an active case to generate dynamic UPI QR, thermal slip, and WhatsApp alerts',
-                          textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                      const Text('Billing & Quick Dispatch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Select an active case to generate dynamic UPI QR, thermal slip, and WhatsApp alerts',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
@@ -72,9 +76,7 @@ class BillingHubPane extends ConsumerWidget {
       ),
       child: Column(
         children: [
-          // Header with Collapse Button
           _buildHeader(context, ref),
-
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -82,33 +84,18 @@ class BillingHubPane extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Dynamic UPI QR Card
-                  Container(
+                  DossierCard(
+                    variant: DossierCardVariant.glass,
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Theme.of(context).dividerColor),
-                    ),
                     child: Column(
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('Dynamic UPI QR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                balanceDue > 0 ? '${settings.currencySymbol}${balanceDue.toStringAsFixed(0)} Due' : 'Paid in Full',
-                                style: TextStyle(
-                                  color: balanceDue > 0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                ),
-                              ),
+                            DossierBadge(
+                              label: balanceDue > 0 ? '${settings.currencySymbol}${balanceDue.toStringAsFixed(0)} Due' : 'Paid in Full',
+                              variant: balanceDue > 0 ? DossierBadgeVariant.warning : DossierBadgeVariant.success,
                             ),
                           ],
                         ),
@@ -117,7 +104,10 @@ class BillingHubPane extends ConsumerWidget {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6),
+                            ],
                           ),
                           child: QrImageView(
                             data: upiPayload,
@@ -142,15 +132,11 @@ class BillingHubPane extends ConsumerWidget {
                   const SizedBox(height: 16),
 
                   // WhatsApp Notifications
-                  Container(
+                  DossierCard(
+                    variant: DossierCardVariant.outlined,
                     padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Theme.of(context).dividerColor),
-                    ),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const Row(
                           children: [
@@ -160,7 +146,12 @@ class BillingHubPane extends ConsumerWidget {
                           ],
                         ),
                         const SizedBox(height: 10),
-                        FilledButton.icon(
+                        DossierButton(
+                          text: 'Send Ready for Pickup',
+                          icon: Icons.send_rounded,
+                          size: DossierButtonSize.sm,
+                          customColor: const Color(0xFF25D366),
+                          isFullWidth: true,
                           onPressed: () {
                             WhatsAppNotificationService.sendReadyForPickupAlert(
                               phoneNumber: activeDossier.phoneNumber,
@@ -170,16 +161,15 @@ class BillingHubPane extends ConsumerWidget {
                               kioskName: settings.kioskName,
                             );
                           },
-                          icon: const Icon(Icons.send_rounded, size: 14),
-                          label: const Text('Send Ready for Pickup'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF25D366),
-                            foregroundColor: Colors.white,
-                            visualDensity: VisualDensity.compact,
-                          ),
                         ),
-                        const SizedBox(height: 6),
-                        OutlinedButton.icon(
+                        const SizedBox(height: 8),
+                        DossierButton(
+                          text: 'Request Missing Docs',
+                          icon: Icons.warning_amber_rounded,
+                          size: DossierButtonSize.sm,
+                          variant: DossierButtonVariant.outline,
+                          customColor: Colors.amber,
+                          isFullWidth: true,
                           onPressed: () {
                             WhatsAppNotificationService.sendMissingDocumentAlert(
                               phoneNumber: activeDossier.phoneNumber,
@@ -188,12 +178,6 @@ class BillingHubPane extends ConsumerWidget {
                               missingDocs: ['Original Aadhaar Card', 'Passport Size Photo'],
                             );
                           },
-                          icon: const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amberAccent),
-                          label: const Text('Request Missing Docs', style: TextStyle(color: Colors.amberAccent)),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Colors.amberAccent),
-                            visualDensity: VisualDensity.compact,
-                          ),
                         ),
                       ],
                     ),
@@ -205,10 +189,10 @@ class BillingHubPane extends ConsumerWidget {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFDFBF7), // Authentic thermal receipt paper
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: const Color(0xFFE2E8F0)),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 2)),
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 6, offset: const Offset(0, 2)),
                       ],
                     ),
                     child: Column(
@@ -248,8 +232,13 @@ class BillingHubPane extends ConsumerWidget {
                             Text('${settings.currencySymbol}${balanceDue.toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12)),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        FilledButton.icon(
+                        const SizedBox(height: 10),
+                        DossierButton(
+                          text: 'Print 58mm Receipt Slip',
+                          icon: Icons.print_rounded,
+                          size: DossierButtonSize.sm,
+                          customColor: const Color(0xFF0F172A),
+                          isFullWidth: true,
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -258,13 +247,6 @@ class BillingHubPane extends ConsumerWidget {
                               ),
                             );
                           },
-                          icon: const Icon(Icons.print_rounded, size: 14),
-                          label: const Text('Print 58mm Receipt Slip'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF0F172A),
-                            foregroundColor: Colors.white,
-                            visualDensity: VisualDensity.compact,
-                          ),
                         ),
                       ],
                     ),

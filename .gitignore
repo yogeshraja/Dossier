@@ -9,6 +9,7 @@
 .idea/
 *.iml
 .vscode/
+devtools_options.yaml
 
 
 

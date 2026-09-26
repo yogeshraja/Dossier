@@ -1,7 +1,7 @@
 # Project State & Memory: Dossier CRM & Kiosk Vault
 
 **Last Updated:** 2026-09-26  
-**Status:** Multi-Platform Responsive Workstation (Mobile Bottom Nav, Tablet Adaptive Rail, Desktop 3-Pane) Verified & Tested
+**Status:** Animated Splash Screen, Micro-Interactions, and Parameterized Component Design System Implemented & Verified
 
 ---
 
@@ -9,14 +9,21 @@
 - **Stack:** Flutter 3.47.x (Dart 3.13.x) targeting Windows, Android, macOS, iOS, Linux, and Web (WASM).
 - **State Management:** Riverpod 2.x with reactive Drift SQLite stream providers.
 - **Local DB:** Drift (SQLite) with cross-platform native FFI and WASM + OPFS support.
-- **Responsive Adaptive Architecture:**
-  - **Mobile (< 640px):** Full-screen bottom navigation bar, single-column focused workflow.
-  - **Tablet (640px – 1000px):** Adaptive compact navigation rail, 2-pane auto-stacking.
-  - **Desktop (≥ 1000px):** 3-pane split view (Directory | Case Stepper | Collapsible Billing Hub).
+- **Component Design System (`lib/presentation/common_widgets/`):**
+  - `DossierButton`: Parametric variants (primary, secondary, outline, danger, success, ghost), sizes (sm, md, lg), press scale micro-animation, hover glow, and loading state.
+  - `DossierCard`: Parametric variants (elevated, outlined, glass, flat, gradient), tap scale & hover elevation, custom badges, headers, and footers.
+  - `DossierInputField`: Floating labels, clear button, password reveal toggle, search variant, custom borders, and focused glow ring.
+  - `DossierPanel`: Expandable/collapsible workstation sections with animated height and rotation transitions.
+  - `DossierBadge`: Color-coded semantic tags (primary, success, warning, danger, info, neutral) with optional pulse animation.
+  - `DossierDialog`: Reusable modal container with smooth scale-and-fade entry transitions.
+- **Splash & Visual Interactions:**
+  - `SplashScreen`: Pulsing glowing logo, boot sequence progress tracker, and fade transition into the Kiosk Workstation.
+  - `AnimatedSwitcher` page transitions across workstation tabs.
 
 ---
 
 ## 2. Commit History
+- `[Pending Commit]`: `feat(ui): add animated splash screen, interactive micro-animations, and parameterized component library`
 - `741a9b1`: `fix(responsive): eliminate layout overflows across mobile, tablet, and desktop viewports`
 - `1d2c033`: `docs(memory): update memory tracker for Phase 3 completion`
 - `c29f0c1`: `feat(settings): add Dark/Light theme toggle, collapsible Billing Hub, custom services catalog, and currency customizer`

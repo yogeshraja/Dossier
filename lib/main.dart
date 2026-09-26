@@ -11,6 +11,8 @@ import 'package:dossier/features/media_prep/screens/media_prep_studio_screen.dar
 import 'package:dossier/features/billing_pos/screens/quick_pos_screen.dart';
 import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
 import 'package:dossier/features/settings/screens/settings_screen.dart';
+import 'package:dossier/presentation/screens/splash_screen.dart';
+import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +36,7 @@ class DossierApp extends ConsumerWidget {
       theme: AppThemes.lightTheme,
       darkTheme: AppThemes.darkTheme,
       themeMode: settings.themeMode,
-      home: const KioskWorkstationHome(),
+      home: const SplashScreen(),
     );
   }
 }
@@ -64,7 +66,6 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 1000;
-    final isTablet = screenWidth >= 640 && screenWidth < 1000;
     final isMobile = screenWidth < 640;
     final settings = ref.watch(kioskSettingsProvider);
 
@@ -94,7 +95,7 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
             ),
           ],
         ),
-        body: _buildTabContent(_selectedTabIndex),
+        body: _buildAnimatedTabContent(_selectedTabIndex),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _selectedTabIndex,
           onDestinationSelected: (idx) => setState(() => _selectedTabIndex = idx),
@@ -128,6 +129,13 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
                       borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: const Icon(Icons.folder_shared_rounded, color: Colors.white, size: 20),
                   ),
@@ -166,17 +174,12 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
                   child: isDesktop
-                      ? OutlinedButton.icon(
+                      ? DossierButton(
+                          text: settings.themeMode == ThemeMode.dark ? 'Light Mode' : 'Dark Mode',
+                          icon: settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                          size: DossierButtonSize.sm,
+                          variant: DossierButtonVariant.outline,
                           onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
-                          icon: Icon(
-                            settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                            size: 15,
-                          ),
-                          label: Text(settings.themeMode == ThemeMode.dark ? 'Light' : 'Dark', style: const TextStyle(fontSize: 12)),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Theme.of(context).dividerColor),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          ),
                         )
                       : IconButton(
                           onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
@@ -219,11 +222,29 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
           ),
           VerticalDivider(width: 1, thickness: 1, color: Theme.of(context).dividerColor),
 
-          // Main Workspace View
+          // Main Workspace View with animated transitions
           Expanded(
-            child: _buildTabContent(_selectedTabIndex),
+            child: _buildAnimatedTabContent(_selectedTabIndex),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAnimatedTabContent(int index) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: child,
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey<int>(index),
+        child: _buildTabContent(index),
       ),
     );
   }
