@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/main.dart';
 
 void main() {
-  testWidgets('DossierApp launches and renders workstation navigation and panes', (WidgetTester tester) async {
+  testWidgets('DossierApp renders on Desktop viewport (1200x800) without overflows', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -25,5 +25,23 @@ void main() {
     expect(find.text('POS & Billing'), findsOneWidget);
     expect(find.text('Vault Sync'), findsOneWidget);
     expect(find.text('Catalog & Settings'), findsOneWidget);
+  });
+
+  testWidgets('DossierApp renders on Mobile viewport (400x800) with Bottom Navigation without overflows', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: DossierApp(),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('DOSSIER'), findsOneWidget);
   });
 }

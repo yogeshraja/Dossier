@@ -62,35 +62,77 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 1000;
+    final isTablet = screenWidth >= 640 && screenWidth < 1000;
+    final isMobile = screenWidth < 640;
     final settings = ref.watch(kioskSettingsProvider);
 
+    if (isMobile) {
+      // Mobile Layout with Bottom Navigation Bar
+      return Scaffold(
+        appBar: AppBar(
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.folder_shared_rounded, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text('DOSSIER', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2, fontSize: 16)),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: Icon(settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, size: 20),
+              tooltip: 'Toggle Theme',
+              onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
+            ),
+          ],
+        ),
+        body: _buildTabContent(_selectedTabIndex),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _selectedTabIndex,
+          onDestinationSelected: (idx) => setState(() => _selectedTabIndex = idx),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.people_alt_outlined), selectedIcon: Icon(Icons.people_alt_rounded), label: 'Dossiers'),
+            NavigationDestination(icon: Icon(Icons.burst_mode_outlined), selectedIcon: Icon(Icons.burst_mode_rounded), label: 'Media'),
+            NavigationDestination(icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale_rounded), label: 'POS'),
+            NavigationDestination(icon: Icon(Icons.cloud_sync_outlined), selectedIcon: Icon(Icons.cloud_sync_rounded), label: 'Sync'),
+            NavigationDestination(icon: Icon(Icons.tune_outlined), selectedIcon: Icon(Icons.tune_rounded), label: 'Settings'),
+          ],
+        ),
+      );
+    }
+
+    // Desktop & Tablet Navigation Rail Layout
     return Scaffold(
       body: Row(
         children: [
-          // Left Navigation Rail for Workstation
           NavigationRail(
             selectedIndex: _selectedTabIndex,
             onDestinationSelected: (idx) => setState(() => _selectedTabIndex = idx),
             backgroundColor: Theme.of(context).navigationRailTheme.backgroundColor,
             extended: isDesktop,
-            minExtendedWidth: 210,
+            minExtendedWidth: 200,
             leading: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                      ),
+                      gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.folder_shared_rounded, color: Colors.white, size: 22),
+                    child: const Icon(Icons.folder_shared_rounded, color: Colors.white, size: 20),
                   ),
                   if (isDesktop) ...[
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -99,7 +141,7 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
                             letterSpacing: 1.5,
-                            fontSize: 16,
+                            fontSize: 15,
                             color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
@@ -108,7 +150,7 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.0,
-                            fontSize: 10,
+                            fontSize: 9,
                             color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
@@ -122,18 +164,18 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
               child: Align(
                 alignment: Alignment.bottomCenter,
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
+                  padding: const EdgeInsets.only(bottom: 16.0),
                   child: isDesktop
                       ? OutlinedButton.icon(
                           onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
                           icon: Icon(
                             settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                            size: 16,
+                            size: 15,
                           ),
-                          label: Text(settings.themeMode == ThemeMode.dark ? 'Light Mode' : 'Dark Mode', style: const TextStyle(fontSize: 12)),
+                          label: Text(settings.themeMode == ThemeMode.dark ? 'Light' : 'Dark', style: const TextStyle(fontSize: 12)),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(color: Theme.of(context).dividerColor),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           ),
                         )
                       : IconButton(
@@ -189,7 +231,7 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
   Widget _buildTabContent(int index) {
     switch (index) {
       case 0:
-        return const _Dossier3PaneWorkspace();
+        return const _DossierAdaptiveWorkspace();
       case 1:
         return const MediaPrepStudioScreen();
       case 2:
@@ -204,24 +246,50 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
   }
 }
 
-class _Dossier3PaneWorkspace extends StatelessWidget {
-  const _Dossier3PaneWorkspace();
+class _DossierAdaptiveWorkspace extends ConsumerWidget {
+  const _DossierAdaptiveWorkspace();
 
   @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        // Pane 1: Customer Dossiers Directory
-        DossierListPane(),
+  Widget build(BuildContext context, WidgetRef ref) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
 
-        // Pane 2: Active Case Intake & Stage Progression Stepper
-        Expanded(
-          child: CaseIntakePane(),
-        ),
+        // Auto-collapse billing pane if space is constrained (< 1000px)
+        final isWideEnoughForBilling = availableWidth >= 950;
+        final isBillingExpanded = ref.watch(isBillingHubExpandedProvider) && isWideEnoughForBilling;
 
-        // Pane 3: Collapsible Billing, Dynamic UPI QR, Thermal Slip & WhatsApp Alerts
-        BillingHubPane(),
-      ],
+        // On very narrow screens (< 600px), switch to stepper or full-width stack
+        if (availableWidth < 600) {
+          final activeDossier = ref.watch(activeDossierProvider);
+          if (activeDossier == null) {
+            return const DossierListPane(width: double.infinity);
+          }
+          return const CaseIntakePane();
+        }
+
+        return Row(
+          children: [
+            // Pane 1: Customer Dossiers Directory (Responsive 260px - 300px)
+            SizedBox(
+              width: availableWidth > 1200 ? 300 : 260,
+              child: const DossierListPane(),
+            ),
+
+            // Pane 2: Active Case Intake & Stage Progression Stepper
+            const Expanded(
+              child: CaseIntakePane(),
+            ),
+
+            // Pane 3: Collapsible Billing, Dynamic UPI QR, Thermal Slip & WhatsApp Alerts
+            if (isBillingExpanded)
+              SizedBox(
+                width: availableWidth > 1300 ? 330 : 300,
+                child: const BillingHubPane(),
+              ),
+          ],
+        );
+      },
     );
   }
 }

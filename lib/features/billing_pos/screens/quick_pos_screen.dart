@@ -60,249 +60,295 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Row(
-        children: [
-          // Left Quick Sale Product Grid
-          Expanded(
-            flex: 6,
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.point_of_sale_rounded, color: Theme.of(context).colorScheme.primary),
-                      const SizedBox(width: 10),
-                      const Text('Walk-in POS Counter', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('1-Tap quick billing for high-frequency counter jobs (Xerox, Print, Lamination)', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-                  const SizedBox(height: 20),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 850;
 
-                  Expanded(
-                    child: GridView.builder(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 14,
-                        mainAxisSpacing: 14,
-                        childAspectRatio: 1.3,
-                      ),
-                      itemCount: _priceMap.length,
-                      itemBuilder: (context, index) {
-                        final key = _priceMap.keys.elementAt(index);
-                        final price = _priceMap[key]!;
-                        final inCart = _cart[key] ?? 0;
-
-                        return InkWell(
-                          onTap: () => _addItem(key),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: inCart > 0 ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : Theme.of(context).cardTheme.color,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: inCart > 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
-                                width: inCart > 0 ? 2 : 1,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        key,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    if (inCart > 0)
-                                      CircleAvatar(
-                                        radius: 12,
-                                        backgroundColor: Theme.of(context).colorScheme.primary,
-                                        child: Text('$inCart', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
-                                      ),
-                                  ],
-                                ),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text('${settings.currencySymbol}${price.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 18)),
-                                    Icon(Icons.add_circle_rounded, color: Theme.of(context).colorScheme.primary, size: 24),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          VerticalDivider(width: 1, color: Theme.of(context).dividerColor),
-
-          // Right Cart & Checkout Pane
-          SizedBox(
-            width: 380,
-            child: Container(
-              color: Theme.of(context).cardTheme.color,
-              padding: const EdgeInsets.all(20),
+          if (!isWide) {
+            // Stack layout for narrow / mobile screen
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  _buildHeader(),
+                  const SizedBox(height: 16),
+                  _buildProductGrid(settings),
+                  const SizedBox(height: 20),
+                  _buildCartSection(settings, subtotal, upiPayload),
+                ],
+              ),
+            );
+          }
+
+          // Side-by-side desktop layout
+          return Row(
+            children: [
+              Expanded(
+                flex: 6,
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Current Register Cart', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      if (_cart.isNotEmpty)
-                        TextButton(
-                          onPressed: () => setState(() => _cart.clear()),
-                          child: const Text('Clear All', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
-                        ),
+                      _buildHeader(),
+                      const SizedBox(height: 16),
+                      Expanded(child: _buildProductGrid(settings)),
                     ],
                   ),
-                  Divider(color: Theme.of(context).dividerColor),
+                ),
+              ),
+              VerticalDivider(width: 1, color: Theme.of(context).dividerColor),
+              SizedBox(
+                width: constraints.maxWidth > 1100 ? 360 : 310,
+                child: Container(
+                  color: Theme.of(context).cardTheme.color,
+                  padding: const EdgeInsets.all(16),
+                  child: _buildCartSection(settings, subtotal, upiPayload),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
-                  Expanded(
-                    child: _cart.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.shopping_cart_outlined, size: 48, color: Colors.grey[500]),
-                                const SizedBox(height: 8),
-                                Text('Cart is empty', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-                              ],
-                            ),
-                          )
-                        : ListView.separated(
-                            itemCount: _cart.length,
-                            separatorBuilder: (context, _) => Divider(color: Theme.of(context).dividerColor.withValues(alpha: 0.5), height: 1),
-                            itemBuilder: (context, index) {
-                              final item = _cart.keys.elementAt(index);
-                              final qty = _cart[item]!;
-                              final unitPrice = _priceMap[item] ?? 0;
+  Widget _buildHeader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.point_of_sale_rounded, color: Theme.of(context).colorScheme.primary, size: 22),
+            const SizedBox(width: 8),
+            const Text('Walk-in POS Counter', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text('1-Tap quick billing for high-frequency counter jobs', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+      ],
+    );
+  }
 
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(item, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
-                                          Text('${settings.currencySymbol}$unitPrice x $qty', style: TextStyle(color: Colors.grey[500], fontSize: 11)),
-                                        ],
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.grey),
-                                      onPressed: () => _removeItem(item),
-                                    ),
-                                    Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    IconButton(
-                                      icon: const Icon(Icons.add_circle_outline, size: 18, color: Colors.grey),
-                                      onPressed: () => _addItem(item),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text('${settings.currencySymbol}${(unitPrice * qty).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                  ),
+  Widget _buildProductGrid(KioskSettings settings) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const ClampingScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 220,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1.3,
+      ),
+      itemCount: _priceMap.length,
+      itemBuilder: (context, index) {
+        final key = _priceMap.keys.elementAt(index);
+        final price = _priceMap[key]!;
+        final inCart = _cart[key] ?? 0;
 
-                  // Total & Payment
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Theme.of(context).dividerColor),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('GRAND TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            Text('${settings.currencySymbol}${subtotal.toStringAsFixed(0)}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontSize: 22)),
-                          ],
-                        ),
-                        if (subtotal > 0) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
-                            child: QrImageView(data: upiPayload, size: 110, version: QrVersions.auto),
-                          ),
-                          const SizedBox(height: 6),
-                          Text('Instant UPI QR: ${settings.merchantUpiVpa}', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.primary)),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: subtotal == 0
-                              ? null
-                              : () {
-                                  setState(() => _cart.clear());
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Cash Payment Logged to Drawer!'), backgroundColor: Color(0xFF10B981)),
-                                  );
-                                },
-                          icon: const Icon(Icons.payments_rounded, color: Color(0xFF10B981)),
-                          label: const Text('Cash Paid'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: const BorderSide(color: Color(0xFF10B981)),
-                          ),
-                        ),
+        return InkWell(
+          onTap: () => _addItem(key),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: inCart > 0 ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : Theme.of(context).cardTheme.color,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: inCart > 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
+                width: inCart > 0 ? 1.5 : 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        key,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: subtotal == 0
-                              ? null
-                              : () {
-                                  setState(() => _cart.clear());
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('UPI Payment Logged & Thermal Slip Printed!'), backgroundColor: Color(0xFF6366F1)),
-                                  );
-                                },
-                          icon: const Icon(Icons.receipt_long_rounded),
-                          label: const Text('UPI & Print'),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
+                    ),
+                    if (inCart > 0)
+                      CircleAvatar(
+                        radius: 10,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        child: Text('$inCart', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
                       ),
-                    ],
-                  ),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('${settings.currencySymbol}${price.toStringAsFixed(0)}',
+                        style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 16)),
+                    Icon(Icons.add_circle_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCartSection(KioskSettings settings, double subtotal, String upiPayload) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Current Cart', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            if (_cart.isNotEmpty)
+              TextButton(
+                onPressed: () => setState(() => _cart.clear()),
+                child: const Text('Clear', style: TextStyle(color: Colors.redAccent, fontSize: 11)),
+              ),
+          ],
+        ),
+        Divider(color: Theme.of(context).dividerColor),
+
+        if (_cart.isEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.shopping_cart_outlined, size: 36, color: Colors.grey[500]),
+                  const SizedBox(height: 6),
+                  Text('Cart is empty', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                 ],
               ),
             ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _cart.length,
+            separatorBuilder: (context, _) => Divider(color: Theme.of(context).dividerColor.withValues(alpha: 0.5), height: 1),
+            itemBuilder: (context, index) {
+              final item = _cart.keys.elementAt(index);
+              final qty = _cart[item]!;
+              final unitPrice = _priceMap[item] ?? 0;
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text('${settings.currencySymbol}$unitPrice x $qty', style: TextStyle(color: Colors.grey[500], fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline, size: 16, color: Colors.grey),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _removeItem(item),
+                    ),
+                    Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline, size: 16, color: Colors.grey),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _addItem(item),
+                    ),
+                    const SizedBox(width: 4),
+                    Text('${settings.currencySymbol}${(unitPrice * qty).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+              );
+            },
           ),
-        ],
-      ),
+
+        const SizedBox(height: 12),
+
+        // Total & QR
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Theme.of(context).dividerColor),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('GRAND TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text('${settings.currencySymbol}${subtotal.toStringAsFixed(0)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontSize: 18)),
+                ],
+              ),
+              if (subtotal > 0) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+                  child: QrImageView(data: upiPayload, size: 90, version: QrVersions.auto),
+                ),
+                const SizedBox(height: 4),
+                Text('Instant UPI: ${settings.merchantUpiVpa}', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.primary)),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: subtotal == 0
+                    ? null
+                    : () {
+                        setState(() => _cart.clear());
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Cash Payment Logged!'), backgroundColor: Color(0xFF10B981)),
+                        );
+                      },
+                icon: const Icon(Icons.payments_rounded, size: 14, color: Color(0xFF10B981)),
+                label: const Text('Cash', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  side: const BorderSide(color: Color(0xFF10B981)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: subtotal == 0
+                    ? null
+                    : () {
+                        setState(() => _cart.clear());
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('UPI Paid & Slip Printed!'), backgroundColor: Color(0xFF6366F1)),
+                        );
+                      },
+                icon: const Icon(Icons.receipt_long_rounded, size: 14),
+                label: const Text('UPI & Print', style: TextStyle(fontSize: 12)),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
