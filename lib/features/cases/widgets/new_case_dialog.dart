@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
+import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:uuid/uuid.dart';
 
 class NewCaseDialog extends ConsumerStatefulWidget {
@@ -164,16 +165,23 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
   @override
   Widget build(BuildContext context) {
     final servicesAsync = ref.watch(activeServicesStreamProvider);
+    final settings = ref.watch(kioskSettingsProvider);
 
     return Dialog(
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: Theme.of(context).cardTheme.color,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         width: 650,
         constraints: const BoxConstraints(maxHeight: 700),
         padding: const EdgeInsets.all(24),
         child: servicesAsync.when(
-          data: (services) => _buildContent(services),
+          data: (services) {
+            // Filter by active categories opt-in
+            final filteredServices = services
+                .where((s) => !s.isArchived && settings.activeCategories.contains(s.category))
+                .toList();
+            return _buildContent(filteredServices, settings);
+          },
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (err, _) => Center(child: Text('Error loading services: $err')),
         ),
@@ -181,7 +189,7 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
     );
   }
 
-  Widget _buildContent(List<Service> services) {
+  Widget _buildContent(List<Service> services, KioskSettings settings) {
     double totalPortal = 0;
     double totalService = 0;
     final Set<String> requiredDocsUnion = {};
@@ -209,10 +217,10 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withOpacity(0.2),
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.post_add_rounded, color: Color(0xFF818CF8)),
+              child: Icon(Icons.post_add_rounded, color: Theme.of(context).colorScheme.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -221,11 +229,11 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
                 children: [
                   const Text(
                     'Start New Job / Case Intake',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   Text(
                     'Customer: ${widget.customer.fullName} (${widget.customer.phoneNumber})',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                    style: TextStyle(fontSize: 13, color: Colors.grey[500]),
                   ),
                 ],
               ),
@@ -239,103 +247,101 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
         const SizedBox(height: 16),
         TextField(
           controller: _titleController,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
+          decoration: const InputDecoration(
             labelText: 'Case Title / Job Description',
             hintText: 'e.g. Fresh PAN Card Application + 2 Xerox',
-            filled: true,
-            fillColor: const Color(0xFF0F172A),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
         const SizedBox(height: 16),
         const Text(
           'Select Services (Check all that apply):',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white70),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: ListView.separated(
-            itemCount: services.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 6),
-            itemBuilder: (context, index) {
-              final s = services[index];
-              final isSelected = _selectedServiceIds.contains(s.id);
-              final qty = _serviceQuantities[s.id] ?? 1;
+          child: services.isEmpty
+              ? const Center(child: Text('No active services in selected categories. Check Settings to enable categories.'))
+              : ListView.separated(
+                  itemCount: services.length,
+                  separatorBuilder: (context, _) => const SizedBox(height: 6),
+                  itemBuilder: (context, index) {
+                    final s = services[index];
+                    final isSelected = _selectedServiceIds.contains(s.id);
+                    final qty = _serviceQuantities[s.id] ?? 1;
 
-              return InkWell(
-                onTap: () => _toggleService(s),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF6366F1).withOpacity(0.15) : const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isSelected ? const Color(0xFF818CF8) : const Color(0xFF334155),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                        color: isSelected ? const Color(0xFF818CF8) : Colors.grey,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    return InkWell(
+                      onTap: () => _toggleService(s),
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isSelected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
+                          ),
+                        ),
+                        child: Row(
                           children: [
-                            Text(
-                              s.name,
-                              style: TextStyle(
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                color: isSelected ? Colors.white : Colors.white70,
+                            Icon(
+                              isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                              color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    s.name,
+                                    style: TextStyle(
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Portal: ${settings.currencySymbol}${s.defaultPortalFee.toStringAsFixed(0)} | Shop: ${settings.currencySymbol}${s.defaultServiceFee.toStringAsFixed(0)}',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                                  ),
+                                ],
                               ),
                             ),
+                            if (isSelected) ...[
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline, size: 20, color: Colors.grey),
+                                onPressed: () {
+                                  if (qty > 1) {
+                                    setState(() => _serviceQuantities[s.id] = qty - 1);
+                                  }
+                                },
+                              ),
+                              Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              IconButton(
+                                icon: const Icon(Icons.add_circle_outline, size: 20, color: Colors.grey),
+                                onPressed: () {
+                                  setState(() => _serviceQuantities[s.id] = qty + 1);
+                                },
+                              ),
+                            ],
                             Text(
-                              'Portal: ₹${s.defaultPortalFee.toStringAsFixed(0)} | Shop Fee: ₹${s.defaultServiceFee.toStringAsFixed(0)}',
-                              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                              '${settings.currencySymbol}${((s.defaultPortalFee + s.defaultServiceFee) * qty).toStringAsFixed(0)}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontSize: 15),
                             ),
                           ],
                         ),
                       ),
-                      if (isSelected) ...[
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle_outline, size: 20, color: Colors.grey),
-                          onPressed: () {
-                            if (qty > 1) {
-                              setState(() => _serviceQuantities[s.id] = qty - 1);
-                            }
-                          },
-                        ),
-                        Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle_outline, size: 20, color: Colors.grey),
-                          onPressed: () {
-                            setState(() => _serviceQuantities[s.id] = qty + 1);
-                          },
-                        ),
-                      ],
-                      Text(
-                        '₹${((s.defaultPortalFee + s.defaultServiceFee) * qty).toStringAsFixed(0)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF34D399), fontSize: 15),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
         const SizedBox(height: 12),
+
         // Live Margin & Checklist summary
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF334155)),
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,36 +349,33 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Pass-through Portal Fee: ₹${totalPortal.toStringAsFixed(0)}', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
-                  Text('Kiosk Profit: ₹${totalService.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFF34D399), fontWeight: FontWeight.bold, fontSize: 13)),
-                  Text('Total Estimate: ₹${grandTotal.toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text('Pass-through Cost: ${settings.currencySymbol}${totalPortal.toStringAsFixed(0)}', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                  Text('Kiosk Profit: ${settings.currencySymbol}${totalService.toStringAsFixed(0)}', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text('Total Estimate: ${settings.currencySymbol}${grandTotal.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 ],
               ),
               if (requiredDocsUnion.isNotEmpty) ...[
-                const Divider(height: 16, color: Color(0xFF334155)),
+                Divider(height: 16, color: Theme.of(context).dividerColor),
                 Text(
                   'Auto-Merged Document Checklist: ${requiredDocsUnion.join(" • ")}',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF818CF8), fontWeight: FontWeight.w500),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
                 ),
               ],
             ],
           ),
         ),
         const SizedBox(height: 14),
+
         Row(
           children: [
             Expanded(
               child: TextField(
                 controller: _advanceController,
                 keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  labelText: 'Advance Collected (₹)',
+                  labelText: 'Advance Collected (${settings.currencySymbol})',
                   hintText: 'e.g. 100',
-                  prefixIcon: const Icon(Icons.currency_rupee_rounded, color: Color(0xFF34D399)),
-                  filled: true,
-                  fillColor: const Color(0xFF0F172A),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  prefixText: '${settings.currencySymbol} ',
                 ),
               ),
             ),
@@ -384,7 +387,6 @@ class _NewCaseDialogState extends ConsumerState<NewCaseDialog> {
                   : const Icon(Icons.check_circle_outline),
               label: const Text('Create Case & Print Token'),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               ),
             ),

@@ -15,7 +15,6 @@ void main() {
       ),
     );
 
-    // Pump frames to render widget tree
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
@@ -25,5 +24,6 @@ void main() {
     expect(find.text('Media Studio'), findsOneWidget);
     expect(find.text('POS & Billing'), findsOneWidget);
     expect(find.text('Vault Sync'), findsOneWidget);
+    expect(find.text('Catalog & Settings'), findsOneWidget);
   });
 }

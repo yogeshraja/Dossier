@@ -14,9 +14,9 @@ class DossierListPane extends ConsumerWidget {
 
     return Container(
       width: 320,
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F172A),
-        border: Border(right: BorderSide(color: Color(0xFF334155), width: 1)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        border: Border(right: BorderSide(color: Theme.of(context).dividerColor, width: 1)),
       ),
       child: Column(
         children: [
@@ -31,7 +31,7 @@ class DossierListPane extends ConsumerWidget {
                   children: [
                     const Text(
                       'Dossiers',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     IconButton.filledTonal(
                       onPressed: () {
@@ -42,40 +42,30 @@ class DossierListPane extends ConsumerWidget {
                       },
                       icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
                       tooltip: 'New Customer',
-                      style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xFF6366F1).withOpacity(0.2),
-                        foregroundColor: const Color(0xFF818CF8),
-                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   onChanged: (val) => ref.read(dossierSearchQueryProvider.notifier).state = val,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  style: const TextStyle(fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'Search phone or name...',
-                    prefixIcon: const Icon(Icons.search_rounded, size: 18, color: Colors.grey),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 18),
                     suffixIcon: searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(Icons.clear, size: 16, color: Colors.grey),
+                            icon: const Icon(Icons.clear, size: 16),
                             onPressed: () => ref.read(dossierSearchQueryProvider.notifier).state = '',
                           )
                         : null,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    filled: true,
-                    fillColor: const Color(0xFF1E293B),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF334155)),
-                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFF334155)),
+          Divider(height: 1, color: Theme.of(context).dividerColor),
 
           // Customer List
           Expanded(
@@ -88,9 +78,9 @@ class DossierListPane extends ConsumerWidget {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.search_off_rounded, size: 40, color: Colors.grey[600]),
+                          Icon(Icons.search_off_rounded, size: 40, color: Colors.grey[500]),
                           const SizedBox(height: 8),
-                          Text('No customers found', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                          Text('No customers found', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
                         ],
                       ),
                     ),
@@ -99,7 +89,7 @@ class DossierListPane extends ConsumerWidget {
 
                 return ListView.separated(
                   itemCount: dossiers.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF1E293B)),
+                  separatorBuilder: (context, _) => Divider(height: 1, color: Theme.of(context).dividerColor.withValues(alpha: 0.5)),
                   itemBuilder: (context, index) {
                     final d = dossiers[index];
                     final isSelected = activeDossier?.id == d.id;
@@ -111,15 +101,19 @@ class DossierListPane extends ConsumerWidget {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        color: isSelected ? const Color(0xFF6366F1).withOpacity(0.18) : Colors.transparent,
+                        color: isSelected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : Colors.transparent,
                         child: Row(
                           children: [
                             CircleAvatar(
                               radius: 18,
-                              backgroundColor: isSelected ? const Color(0xFF6366F1) : const Color(0xFF334155),
+                              backgroundColor: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.surface,
                               child: Text(
                                 d.fullName.isNotEmpty ? d.fullName[0].toUpperCase() : '?',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -131,7 +125,6 @@ class DossierListPane extends ConsumerWidget {
                                     d.fullName,
                                     style: TextStyle(
                                       fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                      color: isSelected ? Colors.white : Colors.white70,
                                       fontSize: 14,
                                     ),
                                     maxLines: 1,
@@ -144,7 +137,7 @@ class DossierListPane extends ConsumerWidget {
                                       const SizedBox(width: 4),
                                       Text(
                                         d.phoneNumber,
-                                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
                                       ),
                                     ],
                                   ),
@@ -152,7 +145,7 @@ class DossierListPane extends ConsumerWidget {
                               ),
                             ),
                             if (isSelected)
-                              const Icon(Icons.chevron_right_rounded, color: Color(0xFF818CF8), size: 18),
+                              Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.primary, size: 18),
                           ],
                         ),
                       ),

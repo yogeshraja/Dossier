@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
+import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/features/cases/widgets/new_case_dialog.dart';
 import 'package:uuid/uuid.dart';
 
@@ -25,7 +26,7 @@ class CaseIntakePane extends ConsumerWidget {
       case 'DOCS_PENDING':
         return Colors.orangeAccent;
       case 'READY_TO_APPLY':
-        return Colors.cyanAccent;
+        return Colors.cyan;
       case 'SUBMITTED':
         return Colors.blueAccent;
       case 'READY_FOR_PICKUP':
@@ -66,6 +67,8 @@ class CaseIntakePane extends ConsumerWidget {
     final activeCasesAsync = ref.watch(activeCasesStreamProvider);
     final activeCase = ref.watch(activeCaseProvider);
     final exhibitsAsync = ref.watch(activeCaseExhibitsStreamProvider);
+    final isBillingExpanded = ref.watch(isBillingHubExpandedProvider);
+    final settings = ref.watch(kioskSettingsProvider);
 
     if (activeDossier == null) {
       return const Center(
@@ -74,21 +77,21 @@ class CaseIntakePane extends ConsumerWidget {
     }
 
     return Container(
-      color: const Color(0xFF090D16),
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: Column(
         children: [
           // Customer Profile Banner
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            decoration: const BoxDecoration(
-              color: Color(0xFF1E293B),
-              border: Border(bottom: BorderSide(color: Color(0xFF334155), width: 1)),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardTheme.color,
+              border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1)),
             ),
             child: Row(
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: const Color(0xFF6366F1),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   child: Text(
                     activeDossier.fullName.isNotEmpty ? activeDossier.fullName[0].toUpperCase() : '?',
                     style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
@@ -103,23 +106,23 @@ class CaseIntakePane extends ConsumerWidget {
                         children: [
                           Text(
                             activeDossier.fullName,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withOpacity(0.2),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: const Text('ACTIVE DOSSIER', style: TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold)),
+                            child: const Text('ACTIVE DOSSIER', style: TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Phone: ${activeDossier.phoneNumber} ${activeDossier.email != null ? "• ${activeDossier.email}" : ""}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                       ),
                     ],
                   ),
@@ -134,10 +137,17 @@ class CaseIntakePane extends ConsumerWidget {
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('New Case Intake'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   ),
                 ),
+                if (!isBillingExpanded) ...[
+                  const SizedBox(width: 10),
+                  IconButton.filledTonal(
+                    onPressed: () => ref.read(isBillingHubExpandedProvider.notifier).state = true,
+                    icon: const Icon(Icons.point_of_sale_rounded, size: 18),
+                    tooltip: 'Expand Billing & QR Hub',
+                  ),
+                ],
               ],
             ),
           ),
@@ -151,9 +161,9 @@ class CaseIntakePane extends ConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.folder_open_rounded, size: 56, color: Colors.grey[600]),
+                        Icon(Icons.folder_open_rounded, size: 56, color: Colors.grey[500]),
                         const SizedBox(height: 12),
-                        const Text('No active cases for this customer', style: TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w600)),
+                        const Text('No active cases for this customer', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 6),
                         Text('Tap "New Case Intake" above to start a service application', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
                       ],
@@ -166,28 +176,27 @@ class CaseIntakePane extends ConsumerWidget {
                   children: [
                     Container(
                       height: 48,
-                      color: const Color(0xFF0F172A),
+                      color: Theme.of(context).colorScheme.surface,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                         itemCount: cases.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        separatorBuilder: (context, _) => const SizedBox(width: 8),
                         itemBuilder: (context, index) {
                           final c = cases[index];
                           final isSelected = activeCase?.id == c.id;
 
                           return ChoiceChip(
-                            label: Text(c.title, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.grey[400])),
+                            label: Text(c.title, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.grey[500])),
                             selected: isSelected,
                             onSelected: (_) => ref.read(activeCaseIdProvider.notifier).state = c.id,
-                            selectedColor: const Color(0xFF6366F1),
-                            backgroundColor: const Color(0xFF1E293B),
-                            side: BorderSide(color: isSelected ? const Color(0xFF818CF8) : const Color(0xFF334155)),
+                            selectedColor: Theme.of(context).colorScheme.primary,
+                            side: BorderSide(color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor),
                           );
                         },
                       ),
                     ),
-                    const Divider(height: 1, color: Color(0xFF334155)),
+                    Divider(height: 1, color: Theme.of(context).dividerColor),
 
                     // Active Case Details & Stepper
                     if (activeCase != null)
@@ -224,8 +233,8 @@ class CaseIntakePane extends ConsumerWidget {
                                             color: isCurrent ? Colors.white : (isPassed ? stageColor : Colors.grey),
                                           ),
                                         ),
-                                        backgroundColor: isCurrent ? stageColor.withOpacity(0.8) : const Color(0xFF1E293B),
-                                        side: BorderSide(color: isCurrent ? stageColor : const Color(0xFF334155)),
+                                        backgroundColor: isCurrent ? stageColor.withValues(alpha: 0.8) : Theme.of(context).cardTheme.color,
+                                        side: BorderSide(color: isCurrent ? stageColor : Theme.of(context).dividerColor),
                                         onPressed: () => _updateStage(ref, activeCase.id, st['key'] as String),
                                       ),
                                     );
@@ -238,21 +247,21 @@ class CaseIntakePane extends ConsumerWidget {
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1E293B),
+                                  color: Theme.of(context).cardTheme.color,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: const Color(0xFF334155)),
+                                  border: Border.all(color: Theme.of(context).dividerColor),
                                 ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                                   children: [
-                                    _buildStatItem('Govt Portal Cost', '₹${activeCase.totalPortalFee.toStringAsFixed(0)}', Colors.grey[400]!),
-                                    _buildStatItem('Kiosk Service Fee', '₹${activeCase.totalServiceFee.toStringAsFixed(0)}', const Color(0xFF818CF8)),
-                                    _buildStatItem('Total Estimate', '₹${activeCase.totalEstimatedAmount.toStringAsFixed(0)}', Colors.white),
-                                    _buildStatItem('Advance Paid', '₹${activeCase.advancePaid.toStringAsFixed(0)}', const Color(0xFF34D399)),
+                                    _buildStatItem('Govt Portal Cost', '${settings.currencySymbol}${activeCase.totalPortalFee.toStringAsFixed(0)}', Colors.grey[500]!),
+                                    _buildStatItem('Kiosk Service Fee', '${settings.currencySymbol}${activeCase.totalServiceFee.toStringAsFixed(0)}', Theme.of(context).colorScheme.primary),
+                                    _buildStatItem('Total Estimate', '${settings.currencySymbol}${activeCase.totalEstimatedAmount.toStringAsFixed(0)}', Theme.of(context).colorScheme.onSurface),
+                                    _buildStatItem('Advance Paid', '${settings.currencySymbol}${activeCase.advancePaid.toStringAsFixed(0)}', const Color(0xFF10B981)),
                                     _buildStatItem(
                                       'Balance Due',
-                                      '₹${(activeCase.totalEstimatedAmount - activeCase.advancePaid).clamp(0, 99999).toStringAsFixed(0)}',
-                                      Colors.amberAccent,
+                                      '${settings.currencySymbol}${(activeCase.totalEstimatedAmount - activeCase.advancePaid).clamp(0, 99999).toStringAsFixed(0)}',
+                                      Colors.amber,
                                     ),
                                   ],
                                 ),
@@ -263,9 +272,9 @@ class CaseIntakePane extends ConsumerWidget {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text('Case Exhibits & Artifacts', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  const Text('Case Exhibits & Artifacts', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                                   TextButton.icon(
-                                    onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'AADHAAR_CARD'),
+                                    onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'ATTACHMENT'),
                                     icon: const Icon(Icons.attach_file, size: 16),
                                     label: const Text('Attach Scanned Doc'),
                                   ),
@@ -280,9 +289,9 @@ class CaseIntakePane extends ConsumerWidget {
                                       width: double.infinity,
                                       padding: const EdgeInsets.all(24),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF1E293B).withOpacity(0.5),
+                                        color: Theme.of(context).cardTheme.color?.withValues(alpha: 0.5),
                                         borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: const Color(0xFF334155), style: BorderStyle.solid),
+                                        border: Border.all(color: Theme.of(context).dividerColor),
                                       ),
                                       child: Column(
                                         children: [
@@ -325,29 +334,29 @@ class CaseIntakePane extends ConsumerWidget {
                                       return Container(
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFF1E293B),
+                                          color: Theme.of(context).cardTheme.color,
                                           borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(color: const Color(0xFF334155)),
+                                          border: Border.all(color: Theme.of(context).dividerColor),
                                         ),
                                         child: Row(
                                           children: [
                                             Container(
                                               padding: const EdgeInsets.all(8),
                                               decoration: BoxDecoration(
-                                                color: const Color(0xFF6366F1).withOpacity(0.2),
+                                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
                                                 borderRadius: BorderRadius.circular(8),
                                               ),
-                                              child: const Icon(Icons.image_rounded, color: Color(0xFF818CF8), size: 20),
+                                              child: Icon(Icons.image_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
                                             ),
                                             const SizedBox(width: 12),
                                             Expanded(
                                               child: Column(
                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
-                                                  Text(ex.fileName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                                  Text(ex.fileName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                                   Text(
                                                     'Slot: ${ex.slotType} • ${(ex.fileSizeBytes / 1024).toStringAsFixed(0)} KB',
-                                                    style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                                                    style: TextStyle(color: Colors.grey[500], fontSize: 11),
                                                   ),
                                                 ],
                                               ),
@@ -355,10 +364,10 @@ class CaseIntakePane extends ConsumerWidget {
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                               decoration: BoxDecoration(
-                                                color: const Color(0xFF10B981).withOpacity(0.2),
+                                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
                                                 borderRadius: BorderRadius.circular(6),
                                               ),
-                                              child: const Text('LOCAL READY', style: TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold)),
+                                              child: const Text('LOCAL READY', style: TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.bold)),
                                             ),
                                           ],
                                         ),

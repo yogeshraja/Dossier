@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
+import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/domain/services/upi_qr_service.dart';
 import 'package:dossier/domain/services/whatsapp_notification_service.dart';
 
@@ -12,71 +13,67 @@ class BillingHubPane extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final activeDossier = ref.watch(activeDossierProvider);
     final activeCase = ref.watch(activeCaseProvider);
+    final isExpanded = ref.watch(isBillingHubExpandedProvider);
+    final settings = ref.watch(kioskSettingsProvider);
+
+    // If collapsed, render nothing (or a thin collapsible bar)
+    if (!isExpanded) {
+      return const SizedBox.shrink();
+    }
 
     if (activeCase == null || activeDossier == null) {
       return Container(
-        width: 340,
-        decoration: const BoxDecoration(
-          color: Color(0xFF0F172A),
-          border: Border(left: BorderSide(color: Color(0xFF334155), width: 1)),
+        width: 350,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardTheme.color,
+          border: Border(left: BorderSide(color: Theme.of(context).dividerColor, width: 1)),
         ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.point_of_sale_rounded, size: 48, color: Colors.grey[600]),
-                const SizedBox(height: 12),
-                const Text('Billing & Comms Hub', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text('Select an active case to generate dynamic UPI QR, thermal slip, and WhatsApp alerts',
-                    textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-              ],
+        child: Column(
+          children: [
+            // Header with Collapse Button
+            _buildHeader(context, ref),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.point_of_sale_rounded, size: 48, color: Colors.grey[600]),
+                      const SizedBox(height: 12),
+                      const Text('Billing & Quick Dispatch', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text('Select an active case to generate dynamic UPI QR, thermal slip, and WhatsApp alerts',
+                          textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       );
     }
 
     final balanceDue = (activeCase.totalEstimatedAmount - activeCase.advancePaid).clamp(0.0, 99999.0);
     final upiPayload = UpiQrService.generateUpiPayload(
-      merchantVpa: 'csckiosk@oksbi',
-      merchantName: 'Dossier Kiosk Station',
+      merchantVpa: settings.merchantUpiVpa,
+      merchantName: settings.kioskName,
       amount: balanceDue > 0 ? balanceDue : activeCase.totalEstimatedAmount,
       transactionId: 'TXN-${activeCase.id.substring(0, 8).toUpperCase()}',
       note: 'Dossier ${activeCase.title}',
     );
 
     return Container(
-      width: 340,
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F172A),
-        border: Border(left: BorderSide(color: Color(0xFF334155), width: 1)),
+      width: 350,
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color,
+        border: Border(left: BorderSide(color: Theme.of(context).dividerColor, width: 1)),
       ),
       child: Column(
         children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Color(0xFF334155), width: 1)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Icon(Icons.qr_code_2_rounded, color: Color(0xFF34D399), size: 18),
-                ),
-                const SizedBox(width: 10),
-                const Text('Billing & Quick Dispatch', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15)),
-              ],
-            ),
-          ),
+          // Header with Collapse Button
+          _buildHeader(context, ref),
 
           Expanded(
             child: SingleChildScrollView(
@@ -88,26 +85,26 @@ class BillingHubPane extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF334155)),
+                      border: Border.all(color: Theme.of(context).dividerColor),
                     ),
                     child: Column(
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Dynamic UPI QR', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                            const Text('Dynamic UPI QR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF6366F1).withOpacity(0.2),
+                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                balanceDue > 0 ? '₹${balanceDue.toStringAsFixed(0)} Due' : 'Paid',
+                                balanceDue > 0 ? '${settings.currencySymbol}${balanceDue.toStringAsFixed(0)} Due' : 'Paid in Full',
                                 style: TextStyle(
-                                  color: balanceDue > 0 ? const Color(0xFFF59E0B) : const Color(0xFF34D399),
+                                  color: balanceDue > 0 ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
                                   fontWeight: FontWeight.bold,
                                   fontSize: 11,
                                 ),
@@ -125,19 +122,19 @@ class BillingHubPane extends ConsumerWidget {
                           child: QrImageView(
                             data: upiPayload,
                             version: QrVersions.auto,
-                            size: 160.0,
+                            size: 150.0,
                             backgroundColor: Colors.white,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Scan with GPay, PhonePe, Paytm',
-                          style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                          style: TextStyle(color: Colors.grey[500], fontSize: 11),
                         ),
                         const SizedBox(height: 2),
-                        const Text(
-                          'UPI ID: csckiosk@oksbi',
-                          style: TextStyle(color: Color(0xFF818CF8), fontSize: 11, fontWeight: FontWeight.w600),
+                        Text(
+                          'VPA: ${settings.merchantUpiVpa}',
+                          style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 11, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -148,9 +145,9 @@ class BillingHubPane extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF334155)),
+                      border: Border.all(color: Theme.of(context).dividerColor),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -159,7 +156,7 @@ class BillingHubPane extends ConsumerWidget {
                           children: [
                             Icon(Icons.chat_rounded, color: Color(0xFF25D366), size: 16),
                             SizedBox(width: 8),
-                            Text('1-Tap WhatsApp Alerts', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                            Text('1-Tap WhatsApp Alerts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           ],
                         ),
                         const SizedBox(height: 10),
@@ -170,13 +167,14 @@ class BillingHubPane extends ConsumerWidget {
                               customerName: activeDossier.fullName,
                               caseTitle: activeCase.title,
                               balanceDue: balanceDue,
+                              kioskName: settings.kioskName,
                             );
                           },
                           icon: const Icon(Icons.send_rounded, size: 14),
                           label: const Text('Send Ready for Pickup'),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF25D366),
-                            foregroundColor: Colors.black,
+                            foregroundColor: Colors.white,
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
@@ -187,7 +185,7 @@ class BillingHubPane extends ConsumerWidget {
                               phoneNumber: activeDossier.phoneNumber,
                               customerName: activeDossier.fullName,
                               caseTitle: activeCase.title,
-                              missingDocs: ['Original Aadhaar Card', 'Passport Sized Photograph'],
+                              missingDocs: ['Original Aadhaar Card', 'Passport Size Photo'],
                             );
                           },
                           icon: const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amberAccent),
@@ -206,18 +204,21 @@ class BillingHubPane extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFDFBF7), // Thermal receipt paper color
+                      color: const Color(0xFFFDFBF7), // Authentic thermal receipt paper
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 2)),
+                      ],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Center(
+                        Center(
                           child: Text(
-                            '=== DOSSIER KIOSK ===\nMain Market CSC Center\nPhone: +91 98765 43210',
+                            '=== ${settings.kioskName.toUpperCase()} ===\n${settings.kioskAddress}\nPhone: ${settings.kioskPhone}',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold),
+                            style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                         ),
                         const Text('--------------------------------', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'monospace', color: Colors.black54)),
@@ -229,21 +230,22 @@ class BillingHubPane extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('Total Estimate:', style: TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
-                            Text('₹${activeCase.totalEstimatedAmount.toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 11)),
+                            Text('${settings.currencySymbol}${activeCase.totalEstimatedAmount.toStringAsFixed(0)}',
+                                style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 11)),
                           ],
                         ),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('Advance Paid:', style: TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
-                            Text('₹${activeCase.advancePaid.toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
+                            Text('${settings.currencySymbol}${activeCase.advancePaid.toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
                           ],
                         ),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('BALANCE DUE:', style: TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 11)),
-                            Text('₹${balanceDue.toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text('${settings.currencySymbol}${balanceDue.toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12)),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -270,6 +272,41 @@ class BillingHubPane extends ConsumerWidget {
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Icon(Icons.qr_code_2_rounded, color: Color(0xFF10B981), size: 18),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Billing & Quick Dispatch',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right_rounded, size: 20),
+            tooltip: 'Collapse Billing Hub',
+            onPressed: () => ref.read(isBillingHubExpandedProvider.notifier).state = false,
           ),
         ],
       ),
