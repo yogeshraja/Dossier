@@ -3,6 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/main.dart';
 import 'package:dossier/presentation/screens/splash_screen.dart';
+import 'package:dossier/features/media_prep/screens/media_prep_studio_screen.dart';
+import 'package:dossier/features/billing_pos/screens/quick_pos_screen.dart';
+import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
+import 'package:dossier/features/settings/screens/settings_screen.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
@@ -29,9 +33,9 @@ void main() {
     });
   });
 
-  group('KioskWorkstationHome Tests', () {
-    testWidgets('KioskWorkstationHome renders on Desktop viewport (1200x800) without overflows', (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1200, 800);
+  group('KioskWorkstationHome Multi-Resolution Tests', () {
+    testWidgets('KioskWorkstationHome renders on Desktop (1440x900) with 0 overflows', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -55,8 +59,27 @@ void main() {
       expect(find.text('Catalog & Settings'), findsOneWidget);
     });
 
-    testWidgets('KioskWorkstationHome renders on Mobile viewport (400x800) with Bottom Navigation', (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(400, 800);
+    testWidgets('KioskWorkstationHome renders on Tablet (768x1024) with 0 overflows', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(768, 1024);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: KioskWorkstationHome(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byType(NavigationRail), findsOneWidget);
+    });
+
+    testWidgets('KioskWorkstationHome renders on Mobile (390x844) with 0 overflows', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
@@ -73,6 +96,103 @@ void main() {
 
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.text('DOSSIER'), findsOneWidget);
+    });
+
+    testWidgets('KioskWorkstationHome renders on Small Phone (320x568) with 0 overflows', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: KioskWorkstationHome(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byType(NavigationBar), findsOneWidget);
+    });
+  });
+
+  group('Individual Screens Multi-Resolution Tests', () {
+    testWidgets('MediaPrepStudioScreen renders without overflows on phone & desktop', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: MediaPrepStudioScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Media Prep Studio'), findsOneWidget);
+    });
+
+    testWidgets('QuickPosScreen renders without overflows on phone & desktop', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: QuickPosScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Walk-in POS Counter'), findsOneWidget);
+    });
+
+    testWidgets('VaultSyncScreen renders without overflows on phone & desktop', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: VaultSyncScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Cloud Vault & Sync'), findsWidgets);
+    });
+
+    testWidgets('SettingsScreen renders without overflows on phone & desktop', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: SettingsScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Catalog & Settings'), findsOneWidget);
     });
   });
 
@@ -158,7 +278,6 @@ void main() {
       expect(find.text('Case Exhibits'), findsOneWidget);
       expect(find.text('Exhibits Content Body'), findsOneWidget);
 
-      // Tap header to collapse
       await tester.tap(find.text('Case Exhibits'));
       await tester.pump(const Duration(milliseconds: 300));
     });

@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/domain/services/upi_qr_service.dart';
+import 'package:dossier/presentation/common_widgets/dossier_button.dart';
+import 'package:dossier/presentation/common_widgets/dossier_card.dart';
+import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 
 class QuickPosScreen extends ConsumerStatefulWidget {
   const QuickPosScreen({super.key});
@@ -93,7 +96,11 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                     children: [
                       _buildHeader(),
                       const SizedBox(height: 16),
-                      Expanded(child: _buildProductGrid(settings)),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: _buildProductGrid(settings),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -104,7 +111,9 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                 child: Container(
                   color: Theme.of(context).cardTheme.color,
                   padding: const EdgeInsets.all(16),
-                  child: _buildCartSection(settings, subtotal, upiPayload),
+                  child: SingleChildScrollView(
+                    child: _buildCartSection(settings, subtotal, upiPayload),
+                  ),
                 ),
               ),
             ],
@@ -115,18 +124,43 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
   }
 
   Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Row(
-          children: [
-            Icon(Icons.point_of_sale_rounded, color: Theme.of(context).colorScheme.primary, size: 22),
-            const SizedBox(width: 8),
-            const Text('Walk-in POS Counter', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(Icons.point_of_sale_rounded, color: Colors.white, size: 20),
         ),
-        const SizedBox(height: 2),
-        Text('1-Tap quick billing for high-frequency counter jobs', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Flexible(
+                    child: Text(
+                      'Walk-in POS Counter',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  DossierBadge(text: '${_cart.length} ITEMS', variant: DossierBadgeVariant.primary),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '1-Tap quick billing for counter jobs',
+                style: TextStyle(color: Colors.grey[500], fontSize: 11.5),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -134,7 +168,7 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
   Widget _buildProductGrid(KioskSettings settings) {
     return GridView.builder(
       shrinkWrap: true,
-      physics: const ClampingScrollPhysics(),
+      physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 220,
         crossAxisSpacing: 12,
@@ -147,52 +181,45 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
         final price = _priceMap[key]!;
         final inCart = _cart[key] ?? 0;
 
-        return InkWell(
+        return DossierCard(
           onTap: () => _addItem(key),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: inCart > 0 ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12) : Theme.of(context).cardTheme.color,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: inCart > 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).dividerColor,
-                width: inCart > 0 ? 1.5 : 1,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        key,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+          isSelected: inCart > 0,
+          variant: inCart > 0 ? DossierCardVariant.glass : DossierCardVariant.flat,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      key,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (inCart > 0)
-                      CircleAvatar(
-                        radius: 10,
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: Text('$inCart', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
-                      ),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('${settings.currencySymbol}${price.toStringAsFixed(0)}',
-                        style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 16)),
-                    Icon(Icons.add_circle_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                  if (inCart > 0)
+                    DossierBadge(
+                      text: '$inCart',
+                      variant: DossierBadgeVariant.primary,
+                      fontSize: 10,
+                    ),
+                ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${settings.currencySymbol}${price.toStringAsFixed(0)}',
+                    style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  Icon(Icons.add_circle_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
+                ],
+              ),
+            ],
           ),
         );
       },
@@ -202,15 +229,19 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
   Widget _buildCartSection(KioskSettings settings, double subtotal, String upiPayload) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Current Cart', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
             if (_cart.isNotEmpty)
-              TextButton(
+              DossierButton(
+                text: 'Clear',
+                size: DossierButtonSize.sm,
+                variant: DossierButtonVariant.ghost,
+                customColor: Colors.redAccent,
                 onPressed: () => setState(() => _cart.clear()),
-                child: const Text('Clear', style: TextStyle(color: Colors.redAccent, fontSize: 11)),
               ),
           ],
         ),
@@ -249,7 +280,7 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(item, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(item, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                           Text('${settings.currencySymbol}$unitPrice x $qty', style: TextStyle(color: Colors.grey[500], fontSize: 10)),
                         ],
                       ),
@@ -266,7 +297,8 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                       onPressed: () => _addItem(item),
                     ),
                     const SizedBox(width: 4),
-                    Text('${settings.currencySymbol}${(unitPrice * qty).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text('${settings.currencySymbol}${(unitPrice * qty).toStringAsFixed(0)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   ],
                 ),
               );
@@ -276,42 +308,46 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
         const SizedBox(height: 12),
 
         // Total & QR
-        Container(
+        DossierCard(
+          variant: DossierCardVariant.glass,
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Theme.of(context).dividerColor),
-          ),
           child: Column(
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('GRAND TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  Text('${settings.currencySymbol}${subtotal.toStringAsFixed(0)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontSize: 18)),
+                  const Text('GRAND TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(
+                    '${settings.currencySymbol}${subtotal.toStringAsFixed(0)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF10B981), fontSize: 18),
+                  ),
                 ],
               ),
               if (subtotal > 0) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
                   child: QrImageView(data: upiPayload, size: 90, version: QrVersions.auto),
                 ),
                 const SizedBox(height: 4),
-                Text('Instant UPI: ${settings.merchantUpiVpa}', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.primary)),
+                Text('Instant UPI: ${settings.merchantUpiVpa}',
+                    style: TextStyle(fontSize: 10.5, color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
               ],
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
 
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
+              child: DossierButton(
+                text: 'Cash',
+                icon: Icons.payments_rounded,
+                variant: DossierButtonVariant.outline,
+                customColor: const Color(0xFF10B981),
+                size: DossierButtonSize.md,
                 onPressed: subtotal == 0
                     ? null
                     : () {
@@ -320,17 +356,15 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                           const SnackBar(content: Text('Cash Payment Logged!'), backgroundColor: Color(0xFF10B981)),
                         );
                       },
-                icon: const Icon(Icons.payments_rounded, size: 14, color: Color(0xFF10B981)),
-                label: const Text('Cash', style: TextStyle(fontSize: 12)),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  side: const BorderSide(color: Color(0xFF10B981)),
-                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: FilledButton.icon(
+              child: DossierButton(
+                text: 'UPI & Print',
+                icon: Icons.receipt_long_rounded,
+                variant: DossierButtonVariant.primary,
+                size: DossierButtonSize.md,
                 onPressed: subtotal == 0
                     ? null
                     : () {
@@ -339,11 +373,6 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                           const SnackBar(content: Text('UPI Paid & Slip Printed!'), backgroundColor: Color(0xFF6366F1)),
                         );
                       },
-                icon: const Icon(Icons.receipt_long_rounded, size: 14),
-                label: const Text('UPI & Print', style: TextStyle(fontSize: 12)),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                ),
               ),
             ),
           ],

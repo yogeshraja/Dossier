@@ -6,6 +6,7 @@ enum DossierButtonVariant {
   outline,
   danger,
   success,
+  warning,
   ghost,
 }
 
@@ -110,6 +111,8 @@ class _DossierButtonState extends State<DossierButton> with SingleTickerProvider
         return Theme.of(context).colorScheme.secondary;
       case DossierButtonVariant.danger:
         return const Color(0xFFEF4444);
+      case DossierButtonVariant.warning:
+        return const Color(0xFFF59E0B);
       case DossierButtonVariant.success:
         return const Color(0xFF10B981);
       case DossierButtonVariant.outline:
@@ -131,6 +134,7 @@ class _DossierButtonState extends State<DossierButton> with SingleTickerProvider
       case DossierButtonVariant.primary:
       case DossierButtonVariant.secondary:
       case DossierButtonVariant.danger:
+      case DossierButtonVariant.warning:
       case DossierButtonVariant.success:
         bgColor = isDisabled ? baseColor.withValues(alpha: 0.4) : (_isHovered ? baseColor.withValues(alpha: 0.9) : baseColor);
         fgColor = Colors.white;
@@ -164,12 +168,16 @@ class _DossierButtonState extends State<DossierButton> with SingleTickerProvider
           Icon(widget.icon, size: _getIconSize(), color: fgColor),
           const SizedBox(width: 8),
         ],
-        Text(
-          widget.text,
-          style: TextStyle(
-            color: fgColor,
-            fontSize: _getFontSize(),
-            fontWeight: FontWeight.bold,
+        Flexible(
+          child: Text(
+            widget.text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: fgColor,
+              fontSize: _getFontSize(),
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         if (!widget.isLoading && widget.trailingIcon != null) ...[

@@ -4,6 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/features/settings/widgets/edit_service_dialog.dart';
+import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
+import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
+import 'package:dossier/presentation/common_widgets/dossier_button.dart';
+import 'package:dossier/presentation/common_widgets/dossier_card.dart';
+import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -100,13 +105,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                           Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                              gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(Icons.tune_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
+                            child: const Icon(Icons.tune_rounded, color: Colors.white, size: 20),
                           ),
                           const SizedBox(width: 10),
-                          const Text('Catalog & Settings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const Expanded(
+                            child: Text(
+                              'Catalog & Settings',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 10),
@@ -132,22 +143,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                        gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(Icons.tune_rounded, color: Theme.of(context).colorScheme.primary, size: 22),
+                      child: const Icon(Icons.tune_rounded, color: Colors.white, size: 22),
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Catalog Customization & Kiosk Settings',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-                        const Text('Configure service fee breakups, document checklists, currency, and themes',
-                            style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Catalog Customization & Kiosk Settings',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                              overflow: TextOverflow.ellipsis),
+                          const SizedBox(height: 2),
+                          const Text('Configure service fee breakups, document checklists, currency, and themes',
+                              style: TextStyle(fontSize: 11, color: Colors.grey),
+                              overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 16),
                     SizedBox(
                       width: 440,
                       child: TabBar(
@@ -194,17 +210,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Category Opt-ins Bar
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardTheme.color,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
+          DossierCard(
+            variant: DossierCardVariant.flat,
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Active Service Category Opt-Ins:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                const Text('Active Service Category Opt-Ins:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -213,7 +225,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                     final isOptedIn = settings.activeCategories.contains(entry.key);
                     return FilterChip(
                       selected: isOptedIn,
-                      label: Text(entry.value, style: const TextStyle(fontSize: 11)),
+                      label: Text(entry.value, style: const TextStyle(fontSize: 11.5)),
                       visualDensity: VisualDensity.compact,
                       selectedColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
                       checkmarkColor: Theme.of(context).colorScheme.primary,
@@ -224,27 +236,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
           // Services Table Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Text('Configured Master Services', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-              FilledButton.icon(
+              Text('Configured Master Services',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+              DossierButton(
+                text: 'Add Custom Service',
+                icon: Icons.add_rounded,
+                size: DossierButtonSize.sm,
+                variant: DossierButtonVariant.primary,
                 onPressed: () {
-                  showDialog(
+                  DossierDialog.show(
                     context: context,
                     builder: (_) => const EditServiceDialog(),
                   );
                 },
-                icon: const Icon(Icons.add, size: 15),
-                label: const Text('Add Custom Service', style: TextStyle(fontSize: 12)),
-                style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
 
           // Services List
           Expanded(
@@ -256,7 +273,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
 
                 return ListView.separated(
                   itemCount: services.length,
-                  separatorBuilder: (context, _) => const SizedBox(height: 6),
+                  separatorBuilder: (context, _) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final s = services[index];
                     List<dynamic> docs = [];
@@ -264,13 +281,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                       docs = jsonDecode(s.requiredDocsJson);
                     } catch (_) {}
 
-                    return Container(
+                    return DossierCard(
+                      variant: DossierCardVariant.outlined,
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardTheme.color,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Theme.of(context).dividerColor),
-                      ),
                       child: Row(
                         children: [
                           Container(
@@ -291,35 +304,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                                     Expanded(
                                       child: Text(
                                         s.name,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        _categoryLabels[s.category] ?? s.category,
-                                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.grey),
-                                      ),
+                                    DossierBadge(
+                                      text: _categoryLabels[s.category] ?? s.category,
+                                      variant: DossierBadgeVariant.neutral,
+                                      fontSize: 9.5,
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 2),
+                                const SizedBox(height: 3),
                                 Text(
                                   'Portal: ${settings.currencySymbol}${s.defaultPortalFee.toStringAsFixed(0)}  •  Shop: ${settings.currencySymbol}${s.defaultServiceFee.toStringAsFixed(0)}  •  Total: ${settings.currencySymbol}${(s.defaultPortalFee + s.defaultServiceFee).toStringAsFixed(0)}',
-                                  style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 11.5, fontWeight: FontWeight.bold),
                                 ),
                                 if (docs.isNotEmpty) ...[
                                   const SizedBox(height: 2),
                                   Text(
                                     'Docs: ${docs.join(", ")}',
-                                    style: TextStyle(color: Colors.grey[500], fontSize: 10),
+                                    style: TextStyle(color: Colors.grey[500], fontSize: 10.5),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -332,7 +339,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                             tooltip: 'Edit Service',
                             visualDensity: VisualDensity.compact,
                             onPressed: () {
-                              showDialog(
+                              DossierDialog.show(
                                 context: context,
                                 builder: (_) => EditServiceDialog(existingService: s),
                               );
@@ -361,13 +368,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Theme Mode Switcher
-          Container(
+          DossierCard(
+            variant: DossierCardVariant.glass,
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardTheme.color,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -403,13 +406,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
           const SizedBox(height: 16),
 
           // Currency Customizer
-          Container(
+          DossierCard(
+            variant: DossierCardVariant.glass,
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardTheme.color,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -449,13 +448,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
   Widget _buildKioskProfileTab(KioskSettings settings, bool isDark) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardTheme.color,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Theme.of(context).dividerColor),
-        ),
+      child: DossierCard(
+        variant: DossierCardVariant.glass,
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -467,37 +462,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               ],
             ),
             const SizedBox(height: 16),
-            TextFormField(
+            DossierInputField(
               controller: _kioskNameCtrl,
-              decoration: const InputDecoration(labelText: 'Kiosk / Cyber Center Name *', prefixIcon: Icon(Icons.store, size: 18)),
+              label: 'Kiosk / Cyber Center Name *',
+              hintText: 'e.g. Metro CSC Center',
+              prefixIcon: const Icon(Icons.store_rounded, size: 18),
             ),
-            const SizedBox(height: 12),
-            TextFormField(
+            const SizedBox(height: 14),
+            DossierInputField(
               controller: _kioskPhoneCtrl,
-              decoration: const InputDecoration(labelText: 'Public Contact Number *', prefixIcon: Icon(Icons.phone, size: 18)),
+              label: 'Public Contact Number *',
+              hintText: 'e.g. +91 98765 43210',
+              prefixIcon: const Icon(Icons.phone_rounded, size: 18),
             ),
-            const SizedBox(height: 12),
-            TextFormField(
+            const SizedBox(height: 14),
+            DossierInputField(
               controller: _kioskAddressCtrl,
-              decoration: const InputDecoration(labelText: 'Center Physical Address', prefixIcon: Icon(Icons.location_on, size: 18)),
+              label: 'Center Physical Address',
+              hintText: 'e.g. Shop 4, Main Market, Civil Lines',
+              prefixIcon: const Icon(Icons.location_on_rounded, size: 18),
             ),
-            const SizedBox(height: 12),
-            TextFormField(
+            const SizedBox(height: 14),
+            DossierInputField(
               controller: _upiVpaCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Merchant UPI ID *',
-                hintText: 'e.g. yourshop@oksbi',
-                prefixIcon: Icon(Icons.qr_code, size: 18),
-              ),
+              label: 'Merchant UPI ID *',
+              hintText: 'e.g. yourshop@oksbi',
+              prefixIcon: const Icon(Icons.qr_code_rounded, size: 18),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.icon(
+              child: DossierButton(
+                text: 'Save Kiosk Profile',
+                icon: Icons.save_rounded,
+                variant: DossierButtonVariant.primary,
+                size: DossierButtonSize.md,
                 onPressed: _saveKioskProfile,
-                icon: const Icon(Icons.save_rounded, size: 16),
-                label: const Text('Save Kiosk Profile'),
-                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
               ),
             ),
           ],

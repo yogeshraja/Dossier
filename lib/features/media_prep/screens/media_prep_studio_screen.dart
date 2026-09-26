@@ -2,6 +2,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:dossier/domain/services/media_prep_service.dart';
+import 'package:dossier/presentation/common_widgets/dossier_button.dart';
+import 'package:dossier/presentation/common_widgets/dossier_card.dart';
+import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 
 class MediaPrepStudioScreen extends StatefulWidget {
   const MediaPrepStudioScreen({super.key});
@@ -142,13 +145,27 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
                           Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                              gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(Icons.burst_mode_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
+                            child: const Icon(Icons.burst_mode_rounded, color: Colors.white, size: 20),
                           ),
                           const SizedBox(width: 10),
-                          const Text('Media Prep Studio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          const Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    'Media Prep Studio',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                DossierBadge(text: 'PURE DART', variant: DossierBadgeVariant.info),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 10),
@@ -174,16 +191,23 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                        gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(Icons.burst_mode_rounded, color: Theme.of(context).colorScheme.primary, size: 22),
+                      child: const Icon(Icons.burst_mode_rounded, color: Colors.white, size: 22),
                     ),
                     const SizedBox(width: 12),
                     const Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Media Prep Studio', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                        Row(
+                          children: [
+                            Text('Media Prep Studio', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                            SizedBox(width: 8),
+                            DossierBadge(text: 'ISOLATE ENGINE', variant: DossierBadgeVariant.info),
+                          ],
+                        ),
+                        SizedBox(height: 2),
                         Text('Pure-Dart Background Isolates (Zero C++ Dependencies)', style: TextStyle(fontSize: 11, color: Colors.grey)),
                       ],
                     ),
@@ -237,25 +261,25 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
               children: [
                 controls,
                 const SizedBox(height: 20),
-                Container(
-                  height: 380,
+                DossierCard(
+                  variant: DossierCardVariant.glass,
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardTheme.color,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                  ),
-                  child: Center(
-                    child: resultBytes != null
-                        ? Image.memory(resultBytes, fit: BoxFit.contain)
-                        : Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.crop_original_rounded, size: 48, color: Colors.grey[500]),
-                              const SizedBox(height: 8),
-                              Text('No $title yet', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            ],
-                          ),
+                  child: SizedBox(
+                    height: 380,
+                    child: Center(
+                      child: resultBytes != null
+                          ? Image.memory(resultBytes, fit: BoxFit.contain)
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.crop_original_rounded, size: 48, color: Colors.grey[500]),
+                                const SizedBox(height: 8),
+                                Text('No $title yet', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                const SizedBox(height: 4),
+                                const Text('Run the action above to render preview', style: TextStyle(color: Colors.grey, fontSize: 11.5)),
+                              ],
+                            ),
+                    ),
                   ),
                 ),
               ],
@@ -268,16 +292,17 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(width: 320, child: controls),
+              SizedBox(
+                width: 340,
+                child: SingleChildScrollView(
+                  child: controls,
+                ),
+              ),
               const SizedBox(width: 24),
               Expanded(
-                child: Container(
+                child: DossierCard(
+                  variant: DossierCardVariant.glass,
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardTheme.color,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                  ),
                   child: Center(
                     child: resultBytes != null
                         ? Image.memory(resultBytes, fit: BoxFit.contain)
@@ -313,13 +338,14 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
           style: TextStyle(color: Colors.grey[500], fontSize: 12),
         ),
         const SizedBox(height: 18),
-        FilledButton.icon(
+        DossierButton(
+          text: 'Stitch Front + Back ID',
+          icon: Icons.auto_fix_high_rounded,
+          isLoading: _isStitching,
+          variant: DossierButtonVariant.primary,
+          size: DossierButtonSize.lg,
+          isFullWidth: true,
           onPressed: _isStitching ? null : _runStitcherDemo,
-          icon: _isStitching
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.auto_fix_high_rounded, size: 16),
-          label: const Text('Stitch Front + Back ID'),
-          style: FilledButton.styleFrom(padding: const EdgeInsets.all(14)),
         ),
       ],
     );
@@ -336,28 +362,30 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
           style: TextStyle(color: Colors.grey[500], fontSize: 12),
         ),
         const SizedBox(height: 16),
-        FilledButton.icon(
+        DossierButton(
+          text: 'Compress to < 200 KB',
+          icon: Icons.compress_rounded,
+          isLoading: _isCompressing,
+          variant: DossierButtonVariant.success,
+          size: DossierButtonSize.md,
+          isFullWidth: true,
           onPressed: _isCompressing ? null : () => _runCompressorDemo(200),
-          icon: const Icon(Icons.compress_rounded, size: 16),
-          label: const Text('Compress to < 200 KB'),
-          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF10B981), padding: const EdgeInsets.all(14)),
         ),
         const SizedBox(height: 10),
-        FilledButton.icon(
+        DossierButton(
+          text: 'Compress to < 50 KB (Photo/Sign)',
+          icon: Icons.compress_rounded,
+          isLoading: _isCompressing,
+          variant: DossierButtonVariant.warning,
+          size: DossierButtonSize.md,
+          isFullWidth: true,
           onPressed: _isCompressing ? null : () => _runCompressorDemo(50),
-          icon: const Icon(Icons.compress_rounded, size: 16),
-          label: const Text('Compress to < 50 KB (Photo/Sign)'),
-          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFF59E0B), padding: const EdgeInsets.all(14)),
         ),
         if (_compressedResult != null) ...[
           const SizedBox(height: 16),
-          Container(
+          DossierCard(
+            variant: DossierCardVariant.flat,
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Theme.of(context).dividerColor),
-            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -396,13 +424,14 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
           onSelectionChanged: (val) => setState(() => _photoCount = val.first),
         ),
         const SizedBox(height: 16),
-        FilledButton.icon(
+        DossierButton(
+          text: 'Generate $_photoCount-Photo Sheet',
+          icon: Icons.grid_on_rounded,
+          isLoading: _isGeneratingGrid,
+          variant: DossierButtonVariant.primary,
+          size: DossierButtonSize.lg,
+          isFullWidth: true,
           onPressed: _isGeneratingGrid ? null : _runPassportGridDemo,
-          icon: _isGeneratingGrid
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.grid_on_rounded, size: 16),
-          label: Text('Generate $_photoCount-Photo Sheet'),
-          style: FilledButton.styleFrom(padding: const EdgeInsets.all(14)),
         ),
       ],
     );
