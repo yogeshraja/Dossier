@@ -11,6 +11,7 @@ import 'package:dossier/features/auth/screens/auth_screen.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
 import 'package:dossier/features/cases/widgets/attach_document_dialog.dart';
 import 'package:dossier/features/cases/widgets/exhibit_preview_dialog.dart';
+import 'package:dossier/features/billing_pos/widgets/record_payment_dialog.dart';
 import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
@@ -558,6 +559,70 @@ void main() {
       expect(find.text('200.0 KB'), findsOneWidget);
       expect(find.text('Delete'), findsOneWidget);
       expect(find.text('Close'), findsOneWidget);
+    });
+  });
+
+  group('Billing and POS Payment Tests', () {
+    testWidgets('RecordPaymentDialog renders customer financial summary and handles payment modes', (WidgetTester tester) async {
+      final dummyCustomer = Dossier(
+        id: 'cust-100',
+        fullName: 'Vikram Singh',
+        phoneNumber: '9876543210',
+        email: 'vikram@example.com',
+        notes: null,
+        remoteFolderId: null,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      final dummyCase = Case(
+        id: 'case-200',
+        dossierId: 'cust-100',
+        title: 'Income Certificate',
+        stage: 'SUBMITTED',
+        totalPortalFee: 50.0,
+        totalServiceFee: 150.0,
+        totalEstimatedAmount: 200.0,
+        advancePaid: 50.0,
+        paymentStatus: 'PARTIALLY_PAID',
+        remoteFolderId: null,
+        targetDate: null,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: RecordPaymentDialog(
+                caseItem: dummyCase,
+                customer: dummyCustomer,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(find.text('Record Counter Payment'), findsOneWidget);
+      expect(find.text('Total Cost'), findsOneWidget);
+      expect(find.text('₹200'), findsOneWidget);
+      expect(find.text('Paid So Far'), findsOneWidget);
+      expect(find.text('₹50'), findsWidgets);
+      expect(find.text('Remaining Due'), findsOneWidget);
+      expect(find.text('₹150'), findsOneWidget);
+
+      // Verify payment modes
+      expect(find.text('Cash'), findsOneWidget);
+      expect(find.text('UPI QR'), findsOneWidget);
+      expect(find.text('Card / Pos'), findsOneWidget);
+
+      // Tap UPI mode
+      await tester.tap(find.text('UPI QR'));
+      await tester.pump();
+
+      expect(find.text('Confirm & Record'), findsOneWidget);
     });
   });
 }

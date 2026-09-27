@@ -93,6 +93,24 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Future<int> updateCasePayment(String caseId, double advancePaid) {
+    return (update(cases)..where((tbl) => tbl.id.equals(caseId))).write(
+      CasesCompanion(
+        advancePaid: Value(advancePaid),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<int> updateDossierNotes(String dossierId, String notes) {
+    return (update(dossiers)..where((tbl) => tbl.id.equals(dossierId))).write(
+      DossiersCompanion(
+        notes: Value(notes),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
   // 4. Exhibits & Artifacts
   Stream<List<Exhibit>> watchExhibitsForCase(String caseId) {
     return (select(exhibits)..where((tbl) => tbl.caseId.equals(caseId))).watch();

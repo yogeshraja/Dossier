@@ -7,11 +7,13 @@ import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/features/cases/widgets/new_case_dialog.dart';
 import 'package:dossier/features/cases/widgets/attach_document_dialog.dart';
 import 'package:dossier/features/cases/widgets/exhibit_preview_dialog.dart';
+import 'package:dossier/features/billing_pos/widgets/record_payment_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 import 'package:dossier/presentation/common_widgets/dossier_panel.dart';
+import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
 
 class CaseIntakePane extends ConsumerWidget {
   const CaseIntakePane({super.key});
@@ -60,6 +62,75 @@ class CaseIntakePane extends ConsumerWidget {
     DossierDialog.show(
       context: context,
       builder: (_) => ExhibitPreviewDialog(exhibit: exhibit),
+    );
+  }
+
+  void _confirmDeleteCase(BuildContext context, WidgetRef ref, Case c) {
+    showDialog(
+      context: context,
+      builder: (ctx) => DossierDialog(
+        title: 'Delete Case',
+        icon: Icons.warning_amber_rounded,
+        content: Text(
+          'Are you sure you want to permanently delete the case "${c.title}"? All associated exhibits will be removed.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          DossierButton(
+            text: 'Cancel',
+            variant: DossierButtonVariant.outline,
+            size: DossierButtonSize.sm,
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+          DossierButton(
+            text: 'Delete Case',
+            variant: DossierButtonVariant.danger,
+            icon: Icons.delete_forever_rounded,
+            size: DossierButtonSize.sm,
+            onPressed: () async {
+              final db = ref.read(databaseProvider);
+              await db.deleteCase(c.id);
+              ref.read(activeCaseIdProvider.notifier).state = null;
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteCustomer(BuildContext context, WidgetRef ref, Dossier d) {
+    showDialog(
+      context: context,
+      builder: (ctx) => DossierDialog(
+        title: 'Delete Customer Dossier',
+        icon: Icons.warning_amber_rounded,
+        content: Text(
+          'Are you sure you want to delete customer "${d.fullName}" (${d.phoneNumber})? All cases and documents for this customer will be removed.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          DossierButton(
+            text: 'Cancel',
+            variant: DossierButtonVariant.outline,
+            size: DossierButtonSize.sm,
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+          DossierButton(
+            text: 'Delete Customer',
+            variant: DossierButtonVariant.danger,
+            icon: Icons.delete_forever_rounded,
+            size: DossierButtonSize.sm,
+            onPressed: () async {
+              final db = ref.read(databaseProvider);
+              await db.deleteDossier(d.id);
+              ref.read(activeDossierIdProvider.notifier).state = null;
+              ref.read(activeCaseIdProvider.notifier).state = null;
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -179,6 +250,12 @@ class CaseIntakePane extends ConsumerWidget {
                         onPressed: () => ref.read(isBillingHubExpandedProvider.notifier).state = true,
                       ),
                     ],
+                    const SizedBox(width: 6),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.grey),
+                      tooltip: 'Delete Customer Dossier',
+                      onPressed: () => _confirmDeleteCustomer(context, ref, activeDossier),
+                    ),
                   ],
                 ),
               ],
@@ -294,25 +371,53 @@ class CaseIntakePane extends ConsumerWidget {
                               DossierCard(
                                 variant: DossierCardVariant.glass,
                                 padding: const EdgeInsets.all(16),
-                                child: Wrap(
-                                  alignment: WrapAlignment.spaceAround,
-                                  runAlignment: WrapAlignment.center,
-                                  spacing: 16,
-                                  runSpacing: 12,
+                                child: Column(
                                   children: [
-                                    _buildStatItem('Govt Portal Cost', '${settings.currencySymbol}${activeCase.totalPortalFee.toStringAsFixed(0)}', Colors.grey[500]!),
-                                    _buildStatItem('Kiosk Profit', '${settings.currencySymbol}${activeCase.totalServiceFee.toStringAsFixed(0)}', Theme.of(context).colorScheme.primary),
-                                    _buildStatItem('Total Estimate', '${settings.currencySymbol}${activeCase.totalEstimatedAmount.toStringAsFixed(0)}', Theme.of(context).colorScheme.onSurface),
-                                    _buildStatItem('Advance Paid', '${settings.currencySymbol}${activeCase.advancePaid.toStringAsFixed(0)}', const Color(0xFF10B981)),
-                                    _buildStatItem(
-                                      'Balance Due',
-                                      '${settings.currencySymbol}${(activeCase.totalEstimatedAmount - activeCase.advancePaid).clamp(0, 99999).toStringAsFixed(0)}',
-                                      Colors.amber,
+                                    Wrap(
+                                      alignment: WrapAlignment.spaceAround,
+                                      runAlignment: WrapAlignment.center,
+                                      spacing: 16,
+                                      runSpacing: 12,
+                                      children: [
+                                        _buildStatItem('Govt Portal Cost', '${settings.currencySymbol}${activeCase.totalPortalFee.toStringAsFixed(0)}', Colors.grey[500]!),
+                                        _buildStatItem('Kiosk Profit', '${settings.currencySymbol}${activeCase.totalServiceFee.toStringAsFixed(0)}', Theme.of(context).colorScheme.primary),
+                                        _buildStatItem('Total Estimate', '${settings.currencySymbol}${activeCase.totalEstimatedAmount.toStringAsFixed(0)}', Theme.of(context).colorScheme.onSurface),
+                                        _buildStatItem('Advance Paid', '${settings.currencySymbol}${activeCase.advancePaid.toStringAsFixed(0)}', const Color(0xFF10B981)),
+                                        _buildStatItem(
+                                          'Balance Due',
+                                          '${settings.currencySymbol}${(activeCase.totalEstimatedAmount - activeCase.advancePaid).clamp(0, 99999).toStringAsFixed(0)}',
+                                          Colors.amber,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    const Divider(height: 1),
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Case ID: ${activeCase.id.substring(0, 8).toUpperCase()}',
+                                          style: TextStyle(fontSize: 11, color: Colors.grey[500], fontFamily: 'monospace'),
+                                        ),
+                                        DossierButton(
+                                          text: 'Collect Payment',
+                                          icon: Icons.payments_rounded,
+                                          size: DossierButtonSize.sm,
+                                          variant: DossierButtonVariant.success,
+                                          onPressed: () {
+                                            DossierDialog.show(
+                                              context: context,
+                                              builder: (_) => RecordPaymentDialog(caseItem: activeCase, customer: activeDossier),
+                                            );
+                                          },
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 18),
 
                               // Document Exhibits Slot Manager via DossierPanel
                               DossierPanel(
@@ -471,6 +576,43 @@ class CaseIntakePane extends ConsumerWidget {
                                   },
                                   loading: () => const Center(child: CircularProgressIndicator()),
                                   error: (err, _) => Text('Error loading exhibits: $err'),
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+
+                              // Notes & Remarks Panel
+                              DossierPanel(
+                                title: 'Customer Remarks & Instructions',
+                                subtitle: 'Special notes for operator shifts and token follow-ups',
+                                leading: const Icon(Icons.sticky_note_2_rounded, size: 18, color: Color(0xFFF59E0B)),
+                                isCollapsible: true,
+                                initiallyExpanded: (activeDossier.notes ?? '').isNotEmpty,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      DossierInputField(
+                                        initialValue: activeDossier.notes ?? '',
+                                        hintText: 'Enter operator remarks, portal application token, or document requirements...',
+                                        maxLines: 3,
+                                        onChanged: (val) {
+                                          ref.read(databaseProvider).updateDossierNotes(activeDossier.id, val);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              // Danger Zone / Delete Case
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 16),
+                                  label: const Text('Delete This Case', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                  onPressed: () => _confirmDeleteCase(context, ref, activeCase),
                                 ),
                               ),
                             ],

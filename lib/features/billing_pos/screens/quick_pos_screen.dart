@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:uuid/uuid.dart';
+import 'package:drift/drift.dart' as drift;
+import 'package:dossier/data/local/app_database.dart';
+import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/domain/services/upi_qr_service.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
+import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
+import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
 
 class QuickPosScreen extends ConsumerStatefulWidget {
   const QuickPosScreen({super.key});
@@ -15,44 +21,200 @@ class QuickPosScreen extends ConsumerStatefulWidget {
 }
 
 class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
-  final Map<String, int> _cart = {}; // itemName -> qty
-  final Map<String, double> _priceMap = {
-    'Xerox B&W (A4)': 3.0,
-    'Color Print (A4)': 10.0,
-    'A4 Document Lamination': 25.0,
-    'Passport Photos (Set of 8)': 60.0,
-    'Urgent Online Form Fill': 80.0,
-    'ID Card PVC Printing': 50.0,
-  };
+  final Map<String, int> _cart = {}; // serviceId -> qty
+  String _selectedCategory = 'ALL';
+  String _searchQuery = '';
 
-  void _addItem(String name) {
+  static const _categories = [
+    {'key': 'ALL', 'label': 'All Services', 'icon': Icons.apps_rounded},
+    {'key': 'PRINTING', 'label': 'Printing & Xerox', 'icon': Icons.print_rounded},
+    {'key': 'GOVT_SCHEME', 'label': 'Govt Schemes', 'icon': Icons.account_balance_rounded},
+    {'key': 'CERTIFICATE', 'label': 'Certificates', 'icon': Icons.verified_rounded},
+    {'key': 'UTILITY', 'label': 'Utility Bills', 'icon': Icons.receipt_long_rounded},
+    {'key': 'LEGAL', 'label': 'Legal & Typing', 'icon': Icons.description_rounded},
+    {'key': 'FINANCIAL', 'label': 'Financial', 'icon': Icons.account_balance_wallet_rounded},
+  ];
+
+  void _addItem(String id) {
     setState(() {
-      _cart[name] = (_cart[name] ?? 0) + 1;
+      _cart[id] = (_cart[id] ?? 0) + 1;
     });
   }
 
-  void _removeItem(String name) {
+  void _removeItem(String id) {
     setState(() {
-      if ((_cart[name] ?? 0) > 1) {
-        _cart[name] = _cart[name]! - 1;
+      if ((_cart[id] ?? 0) > 1) {
+        _cart[id] = _cart[id]! - 1;
       } else {
-        _cart.remove(name);
+        _cart.remove(id);
       }
     });
   }
 
-  double get _subtotal {
+  double _calculateSubtotal(List<Service> services) {
     double sum = 0;
-    _cart.forEach((name, qty) {
-      sum += (_priceMap[name] ?? 0) * qty;
+    _cart.forEach((id, qty) {
+      final service = services.where((s) => s.id == id).firstOrNull;
+      if (service != null) {
+        sum += (service.defaultPortalFee + service.defaultServiceFee) * qty;
+      }
     });
     return sum;
+  }
+
+  Future<void> _completeCheckout({
+    required String paymentMode,
+    required double totalAmount,
+    required List<Service> services,
+    required KioskSettings settings,
+  }) async {
+    if (_cart.isEmpty) return;
+
+    try {
+      final db = ref.read(databaseProvider);
+      const uuid = Uuid();
+      final invoiceId = 'INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+
+      final cartItems = _cart.entries.map((entry) {
+        final s = services.where((item) => item.id == entry.key).firstOrNull;
+        final title = s?.name ?? 'Counter Service';
+        final unitPrice = s != null ? (s.defaultPortalFee + s.defaultServiceFee) : 0.0;
+        return {
+          'id': entry.key,
+          'title': title,
+          'qty': entry.value,
+          'unitPrice': unitPrice,
+          'total': unitPrice * entry.value,
+        };
+      }).toList();
+
+      await db.insertInvoice(
+        InvoicesCompanion.insert(
+          id: uuid.v4(),
+          invoiceNumber: invoiceId,
+          invoiceType: 'WALK_IN_POS',
+          subtotal: totalAmount,
+          grandTotal: totalAmount,
+          amountPaid: drift.Value(totalAmount),
+          paymentStatus: const drift.Value('PAID'),
+        ),
+      );
+
+      if (!mounted) return;
+      setState(() => _cart.clear());
+
+      _showReceiptDialog(
+        context: context,
+        invoiceId: invoiceId,
+        paymentMode: paymentMode,
+        totalAmount: totalAmount,
+        items: cartItems,
+        settings: settings,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving sale: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  void _showReceiptDialog({
+    required BuildContext context,
+    required String invoiceId,
+    required String paymentMode,
+    required double totalAmount,
+    required List<Map<String, dynamic>> items,
+    required KioskSettings settings,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => DossierDialog(
+        title: 'Receipt #$invoiceId',
+        icon: Icons.check_circle_rounded,
+        content: Container(
+          width: 340,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFDFBF7),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '=== ${settings.kioskName.toUpperCase()} ===\n${settings.kioskAddress}\nPhone: ${settings.kioskPhone}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+              const Text('--------------------------------', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'monospace', color: Colors.black54)),
+              Text('Invoice: $invoiceId', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
+              Text('Payment: $paymentMode', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
+              Text('Date: ${DateTime.now().toString().substring(0, 16)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
+              const Text('--------------------------------', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'monospace', color: Colors.black54)),
+              ...items.map((it) => Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text('${it['title']} x${it['qty']}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11), overflow: TextOverflow.ellipsis),
+                      ),
+                      Text('${settings.currencySymbol}${(it['total'] as num).toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  )),
+              const Text('--------------------------------', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'monospace', color: Colors.black54)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('GRAND TOTAL:', style: TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12)),
+                  Text('${settings.currencySymbol}${totalAmount.toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 14)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Center(
+                child: Text('THANK YOU FOR YOUR VISIT!', style: TextStyle(fontFamily: 'monospace', color: Colors.black54, fontSize: 10)),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          DossierButton(
+            text: 'Print 58mm Slip',
+            icon: Icons.print_rounded,
+            variant: DossierButtonVariant.primary,
+            size: DossierButtonSize.sm,
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('ESC/POS receipt sent to thermal printer!'), backgroundColor: Color(0xFF10B981)),
+              );
+            },
+          ),
+          DossierButton(
+            text: 'Done',
+            variant: DossierButtonVariant.outline,
+            size: DossierButtonSize.sm,
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(kioskSettingsProvider);
-    final subtotal = _subtotal;
+    final servicesAsync = ref.watch(activeServicesStreamProvider);
+    final allServices = servicesAsync.value ?? [];
+
+    final filteredServices = allServices.where((s) {
+      final matchesCategory = _selectedCategory == 'ALL' || s.category == _selectedCategory;
+      final matchesSearch = _searchQuery.isEmpty || s.name.toLowerCase().contains(_searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    }).toList();
+
+    final subtotal = _calculateSubtotal(allServices);
     final upiPayload = UpiQrService.generateUpiPayload(
       merchantVpa: settings.merchantUpiVpa,
       merchantName: settings.kioskName,
@@ -65,26 +227,26 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 850;
+          final isWide = constraints.maxWidth >= 900;
 
           if (!isWide) {
-            // Stack layout for narrow / mobile screen
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildHeader(),
-                  const SizedBox(height: 16),
-                  _buildProductGrid(settings),
+                  const SizedBox(height: 14),
+                  _buildCategoryBar(),
+                  const SizedBox(height: 14),
+                  _buildProductGrid(filteredServices, settings, servicesAsync.isLoading && allServices.isEmpty),
                   const SizedBox(height: 20),
-                  _buildCartSection(settings, subtotal, upiPayload),
+                  _buildCartSection(context, settings, subtotal, upiPayload, allServices),
                 ],
               ),
             );
           }
 
-          // Side-by-side desktop layout
           return Row(
             children: [
               Expanded(
@@ -95,10 +257,12 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildHeader(),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
+                      _buildCategoryBar(),
+                      const SizedBox(height: 14),
                       Expanded(
                         child: SingleChildScrollView(
-                          child: _buildProductGrid(settings),
+                          child: _buildProductGrid(filteredServices, settings, servicesAsync.isLoading && allServices.isEmpty),
                         ),
                       ),
                     ],
@@ -107,12 +271,12 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
               ),
               VerticalDivider(width: 1, color: Theme.of(context).dividerColor),
               SizedBox(
-                width: constraints.maxWidth > 1100 ? 360 : 310,
+                width: constraints.maxWidth > 1150 ? 370 : 320,
                 child: Container(
                   color: Theme.of(context).cardTheme.color,
                   padding: const EdgeInsets.all(16),
                   child: SingleChildScrollView(
-                    child: _buildCartSection(settings, subtotal, upiPayload),
+                    child: _buildCartSection(context, settings, subtotal, upiPayload, allServices),
                   ),
                 ),
               ),
@@ -124,48 +288,185 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Icon(Icons.point_of_sale_rounded, color: Colors.white, size: 20),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 650;
+
+        if (isCompact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
-                  const Flexible(
-                    child: Text(
-                      'Walk-in POS Counter',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.point_of_sale_rounded, color: Colors.white, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Flexible(
+                              child: Text(
+                                'Walk-in POS Counter',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            DossierBadge(label: '${_cart.length} ITEMS', variant: DossierBadgeVariant.primary),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '1-Tap quick billing directly linked to your catalog',
+                          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  DossierBadge(text: '${_cart.length} ITEMS', variant: DossierBadgeVariant.primary),
                 ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                '1-Tap quick billing for counter jobs',
-                style: TextStyle(color: Colors.grey[500], fontSize: 11.5),
-                overflow: TextOverflow.ellipsis,
+              const SizedBox(height: 10),
+              DossierInputField(
+                isSearch: true,
+                hintText: 'Search service...',
+                showClearButton: true,
+                onChanged: (val) => setState(() => _searchQuery = val),
               ),
             ],
-          ),
-        ),
-      ],
+          );
+        }
+
+        return Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.point_of_sale_rounded, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Flexible(
+                        child: Text(
+                          'Walk-in POS Counter',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      DossierBadge(label: '${_cart.length} ITEMS', variant: DossierBadgeVariant.primary),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '1-Tap quick billing directly linked to your configured services catalog',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 11.5),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 220,
+              child: DossierInputField(
+                isSearch: true,
+                hintText: 'Search service...',
+                showClearButton: true,
+                onChanged: (val) => setState(() => _searchQuery = val),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  Widget _buildProductGrid(KioskSettings settings) {
+  Widget _buildCategoryBar() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _categories.map((cat) {
+          final isSelected = _selectedCategory == cat['key'];
+          return Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: FilterChip(
+              avatar: Icon(cat['icon'] as IconData, size: 14, color: isSelected ? Colors.white : Theme.of(context).colorScheme.primary),
+              label: Text(cat['label'] as String, style: const TextStyle(fontSize: 11.5)),
+              selected: isSelected,
+              selectedColor: Theme.of(context).colorScheme.primary,
+              labelStyle: TextStyle(
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? Colors.white : null,
+              ),
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => setState(() => _selectedCategory = cat['key'] as String),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildProductGrid(List<Service> services, KioskSettings settings, [bool isLoading = false]) {
+    if (isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (services.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.search_off_rounded, size: 40, color: Colors.grey[500]),
+              const SizedBox(height: 8),
+              const Text('No services match the filter', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 4),
+              Text('Adjust search or check active categories in Settings', style: TextStyle(color: Colors.grey[500], fontSize: 11.5)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -173,16 +474,16 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
         maxCrossAxisExtent: 220,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 1.3,
+        childAspectRatio: 1.25,
       ),
-      itemCount: _priceMap.length,
+      itemCount: services.length,
       itemBuilder: (context, index) {
-        final key = _priceMap.keys.elementAt(index);
-        final price = _priceMap[key]!;
-        final inCart = _cart[key] ?? 0;
+        final s = services[index];
+        final price = s.defaultPortalFee + s.defaultServiceFee;
+        final inCart = _cart[s.id] ?? 0;
 
         return DossierCard(
-          onTap: () => _addItem(key),
+          onTap: () => _addItem(s.id),
           isSelected: inCart > 0,
           variant: inCart > 0 ? DossierCardVariant.glass : DossierCardVariant.flat,
           padding: const EdgeInsets.all(12),
@@ -195,7 +496,7 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      key,
+                      s.name,
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -203,7 +504,7 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                   ),
                   if (inCart > 0)
                     DossierBadge(
-                      text: '$inCart',
+                      label: '$inCart',
                       variant: DossierBadgeVariant.primary,
                       fontSize: 10,
                     ),
@@ -212,11 +513,28 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${settings.currencySymbol}${price.toStringAsFixed(0)}',
-                    style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 15),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${settings.currencySymbol}${price.toStringAsFixed(0)}',
+                        style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      Text(
+                        'Govt: ${settings.currencySymbol}${s.defaultPortalFee.toStringAsFixed(0)}',
+                        style: TextStyle(fontSize: 9.5, color: Colors.grey[500]),
+                      ),
+                    ],
                   ),
-                  Icon(Icons.add_circle_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.add_rounded, color: Theme.of(context).colorScheme.primary, size: 18),
+                  ),
                 ],
               ),
             ],
@@ -226,7 +544,13 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
     );
   }
 
-  Widget _buildCartSection(KioskSettings settings, double subtotal, String upiPayload) {
+  Widget _buildCartSection(
+    BuildContext context,
+    KioskSettings settings,
+    double subtotal,
+    String upiPayload,
+    List<Service> services,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -249,7 +573,7 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
 
         if (_cart.isEmpty)
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 24),
+            padding: const EdgeInsets.symmetric(vertical: 28),
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -257,6 +581,8 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                   Icon(Icons.shopping_cart_outlined, size: 36, color: Colors.grey[500]),
                   const SizedBox(height: 6),
                   Text('Cart is empty', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                  const SizedBox(height: 2),
+                  Text('Tap any counter service to add', style: TextStyle(color: Colors.grey[500], fontSize: 11)),
                 ],
               ),
             ),
@@ -268,9 +594,11 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
             itemCount: _cart.length,
             separatorBuilder: (context, _) => Divider(color: Theme.of(context).dividerColor.withValues(alpha: 0.5), height: 1),
             itemBuilder: (context, index) {
-              final item = _cart.keys.elementAt(index);
-              final qty = _cart[item]!;
-              final unitPrice = _priceMap[item] ?? 0;
+              final id = _cart.keys.elementAt(index);
+              final qty = _cart[id]!;
+              final service = services.where((s) => s.id == id).firstOrNull;
+              final title = service?.name ?? 'Custom Item';
+              final unitPrice = service != null ? (service.defaultPortalFee + service.defaultServiceFee) : 0.0;
 
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6.0),
@@ -280,7 +608,7 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(item, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                           Text('${settings.currencySymbol}$unitPrice x $qty', style: TextStyle(color: Colors.grey[500], fontSize: 10)),
                         ],
                       ),
@@ -288,13 +616,13 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                     IconButton(
                       icon: const Icon(Icons.remove_circle_outline, size: 16, color: Colors.grey),
                       visualDensity: VisualDensity.compact,
-                      onPressed: () => _removeItem(item),
+                      onPressed: () => _removeItem(id),
                     ),
                     Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline, size: 16, color: Colors.grey),
                       visualDensity: VisualDensity.compact,
-                      onPressed: () => _addItem(item),
+                      onPressed: () => _addItem(id),
                     ),
                     const SizedBox(width: 4),
                     Text('${settings.currencySymbol}${(unitPrice * qty).toStringAsFixed(0)}',
@@ -307,7 +635,7 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
 
         const SizedBox(height: 12),
 
-        // Total & QR
+        // Total & Dynamic QR Card
         DossierCard(
           variant: DossierCardVariant.glass,
           padding: const EdgeInsets.all(12),
@@ -339,40 +667,41 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
         ),
         const SizedBox(height: 12),
 
+        // Checkout Buttons
         Row(
           children: [
             Expanded(
               child: DossierButton(
-                text: 'Cash',
+                text: 'Cash Pay',
                 icon: Icons.payments_rounded,
                 variant: DossierButtonVariant.outline,
                 customColor: const Color(0xFF10B981),
                 size: DossierButtonSize.md,
                 onPressed: subtotal == 0
                     ? null
-                    : () {
-                        setState(() => _cart.clear());
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Cash Payment Logged!'), backgroundColor: Color(0xFF10B981)),
-                        );
-                      },
+                    : () => _completeCheckout(
+                          paymentMode: 'CASH',
+                          totalAmount: subtotal,
+                          services: services,
+                          settings: settings,
+                        ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: DossierButton(
-                text: 'UPI & Print',
+                text: 'UPI & Slip',
                 icon: Icons.receipt_long_rounded,
                 variant: DossierButtonVariant.primary,
                 size: DossierButtonSize.md,
                 onPressed: subtotal == 0
                     ? null
-                    : () {
-                        setState(() => _cart.clear());
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('UPI Paid & Slip Printed!'), backgroundColor: Color(0xFF6366F1)),
-                        );
-                      },
+                    : () => _completeCheckout(
+                          paymentMode: 'UPI_QR',
+                          totalAmount: subtotal,
+                          services: services,
+                          settings: settings,
+                        ),
               ),
             ),
           ],

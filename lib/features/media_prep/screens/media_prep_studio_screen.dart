@@ -1,20 +1,25 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:uuid/uuid.dart';
+import 'package:drift/drift.dart' as drift;
+import 'package:dossier/data/local/app_database.dart';
+import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/domain/services/media_prep_service.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 
-class MediaPrepStudioScreen extends StatefulWidget {
+class MediaPrepStudioScreen extends ConsumerStatefulWidget {
   const MediaPrepStudioScreen({super.key});
 
   @override
-  State<MediaPrepStudioScreen> createState() => _MediaPrepStudioScreenState();
+  ConsumerState<MediaPrepStudioScreen> createState() => _MediaPrepStudioScreenState();
 }
 
-class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with SingleTickerProviderStateMixin {
+class _MediaPrepStudioScreenState extends ConsumerState<MediaPrepStudioScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   // Stitcher State
@@ -277,6 +282,53 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
     }
   }
 
+  Future<void> _attachToActiveCase(Uint8List bytes, String slotType, String defaultFilename) async {
+    final activeCase = ref.read(activeCaseProvider);
+    if (activeCase == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active case selected. Please select a customer case in the Dossiers tab first.')),
+      );
+      return;
+    }
+
+    try {
+      final db = ref.read(databaseProvider);
+      const uuid = Uuid();
+      final tempDir = Directory.systemTemp;
+      final fileId = uuid.v4().substring(0, 8);
+      final filePath = '${tempDir.path}/dossier_${fileId}_$defaultFilename';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+
+      await db.insertExhibit(
+        ExhibitsCompanion.insert(
+          id: uuid.v4(),
+          caseId: activeCase.id,
+          slotType: slotType,
+          fileName: defaultFilename,
+          mimeType: 'image/jpeg',
+          fileSizeBytes: bytes.lengthInBytes,
+          localPath: drift.Value(filePath),
+        ),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully attached "$defaultFilename" to Case "${activeCase.title}"!'),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error attaching to case: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -399,19 +451,28 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
                   _buildIdStitcherControls(),
                   _stitchedResult,
                   'Stitched A4 Page Output',
+                  'Aadhaar Front/Back',
+                  'stitched_id_a4.jpg',
                   () => _stitchedResult != null ? _saveOutputBytes(_stitchedResult!, 'stitched_id_a4.jpg') : null,
+                  () => _stitchedResult != null ? _attachToActiveCase(_stitchedResult!, 'Aadhaar Card', 'stitched_id_a4.jpg') : null,
                 ),
                 _buildResponsiveView(
                   _buildCompressorControls(),
                   _compressedResult,
                   'DCT Quantized Output',
+                  'Compressed Document',
+                  'compressed_${_targetKb}kb.jpg',
                   () => _compressedResult != null ? _saveOutputBytes(_compressedResult!, 'compressed_${_targetKb}kb.jpg') : null,
+                  () => _compressedResult != null ? _attachToActiveCase(_compressedResult!, 'Compressed Document', 'compressed_${_targetKb}kb.jpg') : null,
                 ),
                 _buildResponsiveView(
                   _buildPassportStudioControls(),
                   _passportGridResult,
                   '4x6 Tiled Passport Sheet Output',
+                  'Passport Photo Grid',
+                  'passport_grid_${_photoCount}p.jpg',
                   () => _passportGridResult != null ? _saveOutputBytes(_passportGridResult!, 'passport_grid_${_photoCount}p.jpg') : null,
+                  () => _passportGridResult != null ? _attachToActiveCase(_passportGridResult!, 'Passport Photo Grid', 'passport_grid_${_photoCount}p.jpg') : null,
                 ),
               ],
             ),
@@ -421,7 +482,17 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
     );
   }
 
-  Widget _buildResponsiveView(Widget controls, Uint8List? resultBytes, String title, VoidCallback? onSave) {
+  Widget _buildResponsiveView(
+    Widget controls,
+    Uint8List? resultBytes,
+    String title,
+    String slotType,
+    String filename,
+    VoidCallback? onSave,
+    VoidCallback? onAttach,
+  ) {
+    final activeCase = ref.watch(activeCaseProvider);
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 800;
@@ -456,16 +527,28 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
                                 ),
                         ),
                       ),
-                      if (resultBytes != null && onSave != null) ...[
-                        const SizedBox(height: 10),
-                        DossierButton(
-                          text: 'Save / Export Output',
-                          icon: Icons.save_alt_rounded,
-                          variant: DossierButtonVariant.success,
-                          size: DossierButtonSize.md,
-                          isFullWidth: true,
-                          onPressed: onSave,
-                        ),
+                      if (resultBytes != null) ...[
+                        const SizedBox(height: 12),
+                        if (activeCase != null && onAttach != null) ...[
+                          DossierButton(
+                            text: 'Attach to Case #${activeCase.title}',
+                            icon: Icons.attach_file_rounded,
+                            variant: DossierButtonVariant.primary,
+                            size: DossierButtonSize.md,
+                            isFullWidth: true,
+                            onPressed: onAttach,
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        if (onSave != null)
+                          DossierButton(
+                            text: 'Export File to Disk',
+                            icon: Icons.save_alt_rounded,
+                            variant: DossierButtonVariant.outline,
+                            size: DossierButtonSize.md,
+                            isFullWidth: true,
+                            onPressed: onSave,
+                          ),
                       ],
                     ],
                   ),
@@ -516,17 +599,30 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
                                 ),
                         ),
                       ),
-                      if (resultBytes != null && onSave != null) ...[
-                        const SizedBox(height: 12),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: DossierButton(
-                            text: 'Save / Export Output',
-                            icon: Icons.save_alt_rounded,
-                            variant: DossierButtonVariant.success,
-                            size: DossierButtonSize.md,
-                            onPressed: onSave,
-                          ),
+                      if (resultBytes != null) ...[
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (activeCase != null && onAttach != null) ...[
+                              DossierButton(
+                                text: 'Attach to Case #${activeCase.title}',
+                                icon: Icons.attach_file_rounded,
+                                variant: DossierButtonVariant.primary,
+                                size: DossierButtonSize.md,
+                                onPressed: onAttach,
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                            if (onSave != null)
+                              DossierButton(
+                                text: 'Export File',
+                                icon: Icons.save_alt_rounded,
+                                variant: DossierButtonVariant.outline,
+                                size: DossierButtonSize.md,
+                                onPressed: onSave,
+                              ),
+                          ],
                         ),
                       ],
                     ],

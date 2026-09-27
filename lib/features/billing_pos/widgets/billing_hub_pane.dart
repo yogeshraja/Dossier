@@ -5,6 +5,8 @@ import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/domain/services/upi_qr_service.dart';
 import 'package:dossier/domain/services/whatsapp_notification_service.dart';
+import 'package:dossier/features/billing_pos/widgets/record_payment_dialog.dart';
+import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
@@ -125,6 +127,20 @@ class BillingHubPane extends ConsumerWidget {
                         Text(
                           'VPA: ${settings.merchantUpiVpa}',
                           style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 12),
+                        DossierButton(
+                          text: balanceDue > 0 ? 'Record Payment (${settings.currencySymbol}${balanceDue.toStringAsFixed(0)})' : 'Record New Payment',
+                          icon: Icons.payments_rounded,
+                          size: DossierButtonSize.sm,
+                          variant: DossierButtonVariant.success,
+                          isFullWidth: true,
+                          onPressed: () {
+                            DossierDialog.show(
+                              context: context,
+                              builder: (_) => RecordPaymentDialog(caseItem: activeCase, customer: activeDossier),
+                            );
+                          },
                         ),
                       ],
                     ),
