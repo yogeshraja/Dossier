@@ -59,7 +59,8 @@
 ---
 
 ## 3. Commit History
-- `[HEAD]`: `feat(modernization): add CaseStageTimeline, ambient KioskStatusBar, smart Dossier filters, and floating DossierToast notifications`
+- `[HEAD]`: `fix(linux): suppress Mesa/EGL virtual DRI fallback logs and configure default Adwaita GTK cursor theme`
+- `[PREV]`: `feat(modernization): add CaseStageTimeline, ambient KioskStatusBar, smart Dossier filters, and floating DossierToast notifications`
 - `[PREV]`: `feat(modernization): implement 5-pillar UI overhaul with glassmorphism, Ctrl+K command palette, quick cash tender pad, animated thermal receipts, and sparkline charts`
 - `[PREV]`: `feat(printing): add ESC/POS raw hardware byte driver, Daily Sales register, and Cloudflare R2 backup vault`
 - `[PREV]`: `feat(ui): add rainbow hover border sweep to buttons, collapsible animated sidebar, and Google Fonts typography`

@@ -475,6 +475,47 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Ambient Server Endpoint Status Pill
+          Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: (authState.isServerConnected ? const Color(0xFF10B981) : const Color(0xFFF59E0B))
+                  .withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: (authState.isServerConnected ? const Color(0xFF10B981) : const Color(0xFFF59E0B))
+                    .withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  authState.isServerConnected ? Icons.cloud_done_rounded : Icons.cloud_queue_rounded,
+                  size: 13,
+                  color: authState.isServerConnected ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    authState.isServerConnected
+                        ? 'Server: api.dossier.app'
+                        : 'Offline Mode',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: authState.isServerConnected
+                          ? (isDark ? const Color(0xFF34D399) : const Color(0xFF059669))
+                          : const Color(0xFFF59E0B),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Auth Mode Segmented Control (Sign In vs Sign Up)
           Container(
             padding: const EdgeInsets.all(4),

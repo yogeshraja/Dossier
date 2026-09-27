@@ -1,7 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
+import 'package:dossier/data/remote/auth/server_auth_api_service.dart';
 import 'package:dossier/features/auth/models/operator_model.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
+
+final serverAuthApiServiceProvider = Provider<ServerAuthApiService>((ref) {
+  return ServerAuthApiService();
+});
 
 class AuthState {
   final List<KioskOperator> registeredOperators;
@@ -11,6 +15,10 @@ class AuthState {
   final bool isLoading;
   final String? errorMessage;
   final bool rememberMe;
+  final String? serverAuthToken;
+  final bool isServerConnected;
+  final bool isOfflineMode;
+  final String serverUrl;
 
   const AuthState({
     this.registeredOperators = const [],
@@ -20,6 +28,10 @@ class AuthState {
     this.isLoading = false,
     this.errorMessage,
     this.rememberMe = true,
+    this.serverAuthToken,
+    this.isServerConnected = true,
+    this.isOfflineMode = false,
+    this.serverUrl = 'https://api.dossier.app',
   });
 
   bool get hasRegisteredOperators => registeredOperators.isNotEmpty;
@@ -32,6 +44,10 @@ class AuthState {
     bool? isLoading,
     String? errorMessage,
     bool? rememberMe,
+    String? serverAuthToken,
+    bool? isServerConnected,
+    bool? isOfflineMode,
+    String? serverUrl,
     bool clearCurrentOperator = false,
     bool clearErrorMessage = false,
   }) {
@@ -43,14 +59,19 @@ class AuthState {
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       rememberMe: rememberMe ?? this.rememberMe,
+      serverAuthToken: serverAuthToken ?? this.serverAuthToken,
+      isServerConnected: isServerConnected ?? this.isServerConnected,
+      isOfflineMode: isOfflineMode ?? this.isOfflineMode,
+      serverUrl: serverUrl ?? this.serverUrl,
     );
   }
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final Ref ref;
+  final ServerAuthApiService _serverAuthApi;
 
-  AuthNotifier(this.ref)
+  AuthNotifier(this.ref, this._serverAuthApi)
       : super(
           const AuthState(
             registeredOperators: [],
@@ -59,44 +80,93 @@ class AuthNotifier extends StateNotifier<AuthState> {
           ),
         );
 
-  /// Sign in with Phone/Email and Password
+  /// Configure custom server endpoint URL
+  void setServerUrl(String url) {
+    state = state.copyWith(serverUrl: url.trim());
+  }
+
+  /// Ping server to test connectivity
+  Future<bool> checkServerConnection() async {
+    final connected = await _serverAuthApi.checkServerHealth();
+    state = state.copyWith(isServerConnected: connected);
+    return connected;
+  }
+
+  /// Sign in with Phone/Email and Password via Server with Offline Fallback
   Future<bool> signInWithCredentials({
     required String identifier,
     required String password,
   }) async {
     state = state.copyWith(isLoading: true, clearErrorMessage: true);
-    await Future.delayed(const Duration(milliseconds: 200));
 
-    final cleanId = identifier.trim().toLowerCase().replaceAll(RegExp(r'[\s\-+]'), '');
+    final cleanId = identifier.trim();
     final cleanPwd = password.trim();
 
-    if (state.registeredOperators.isEmpty) {
+    if (cleanId.isEmpty || cleanPwd.isEmpty) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'No operator account found. Please set up your kiosk first.',
+        errorMessage: 'Please enter your mobile number/email and password.',
       );
       return false;
     }
 
-    final matched = state.registeredOperators.where((op) {
-      final opPhone = op.phone.replaceAll(RegExp(r'[\s\-+]'), '');
-      final opEmail = op.email?.toLowerCase().trim() ?? '';
-      final idMatch = opPhone == cleanId || opPhone.endsWith(cleanId) || opEmail == cleanId;
-      final pwdMatch = op.passwordHash == cleanPwd;
-      return idMatch && pwdMatch;
-    }).toList();
+    // 1. Attempt remote server sign-in
+    final serverResult = await _serverAuthApi.signIn(
+      identifier: cleanId,
+      password: cleanPwd,
+    );
 
-    if (matched.isNotEmpty) {
-      final operator = matched.first.copyWith(lastLoginAt: DateTime.now());
-      _updateOperatorState(operator);
+    if (serverResult.isSuccess && serverResult.operator != null) {
+      final serverOp = serverResult.operator!;
+      
+      // Update local operator cache
+      final existingIndex = state.registeredOperators.indexWhere((o) => o.id == serverOp.id || o.phone == serverOp.phone);
+      List<KioskOperator> updatedList;
+      if (existingIndex >= 0) {
+        updatedList = List.from(state.registeredOperators)..[existingIndex] = serverOp;
+      } else {
+        updatedList = [...state.registeredOperators, serverOp];
+      }
+
+      state = state.copyWith(
+        registeredOperators: updatedList,
+        serverAuthToken: serverResult.token,
+        isServerConnected: true,
+        isOfflineMode: false,
+      );
+
+      _updateOperatorState(serverOp);
       return true;
-    } else {
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: 'Invalid mobile number/email or password.',
-      );
-      return false;
     }
+
+    // 2. If server was offline or returned offline fallback, authenticate against local cache
+    if (serverResult.isOfflineFallback || state.registeredOperators.isNotEmpty) {
+      final normalizedId = cleanId.toLowerCase().replaceAll(RegExp(r'[\s\-+]'), '');
+      final matched = state.registeredOperators.where((op) {
+        final opPhone = op.phone.replaceAll(RegExp(r'[\s\-+]'), '');
+        final opEmail = op.email?.toLowerCase().trim() ?? '';
+        final idMatch = opPhone == normalizedId || opPhone.endsWith(normalizedId) || opEmail == normalizedId;
+        final pwdMatch = op.passwordHash == cleanPwd;
+        return idMatch && pwdMatch;
+      }).toList();
+
+      if (matched.isNotEmpty) {
+        final operator = matched.first.copyWith(lastLoginAt: DateTime.now());
+        state = state.copyWith(
+          isOfflineMode: true,
+          serverAuthToken: state.serverAuthToken ?? 'cached-offline-token',
+        );
+        _updateOperatorState(operator);
+        return true;
+      }
+    }
+
+    // 3. Failed authentication
+    state = state.copyWith(
+      isLoading: false,
+      errorMessage: serverResult.errorMessage ?? 'Invalid mobile number/email or password.',
+    );
+    return false;
   }
 
   /// Sign in or Quick Unlock with 4-Digit PIN
@@ -130,7 +200,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         matched = state.currentOperator;
       }
     } else {
-      // Find operator matching this PIN
       final list = state.registeredOperators.where((o) => o.pin == cleanPin).toList();
       if (list.isNotEmpty) {
         matched = list.first;
@@ -150,7 +219,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Register / Sign-Up New Kiosk Operator
+  /// Register / Sign-Up New Kiosk Account on Server
   Future<bool> signUp({
     required String kioskName,
     required String operatorName,
@@ -163,7 +232,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? kioskAddress,
   }) async {
     state = state.copyWith(isLoading: true, clearErrorMessage: true);
-    await Future.delayed(const Duration(milliseconds: 250));
 
     final cleanPhone = phone.trim();
     final cleanName = operatorName.trim();
@@ -177,43 +245,39 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return false;
     }
 
-    // Check duplicate phone
-    final exists = state.registeredOperators.any(
-      (o) => o.phone.replaceAll(RegExp(r'\D'), '') == cleanPhone.replaceAll(RegExp(r'\D'), ''),
+    // Call server sign-up endpoint
+    final result = await _serverAuthApi.signUp(
+      kioskName: cleanKiosk,
+      operatorName: cleanName,
+      phone: cleanPhone,
+      email: email,
+      password: password,
+      pin: pin,
+      role: role,
+      merchantUpiVpa: merchantUpiVpa,
+      kioskAddress: kioskAddress,
     );
 
-    if (exists) {
+    if (result.isSuccess && result.operator != null) {
+      final newOperator = result.operator!;
+      final updatedList = [...state.registeredOperators, newOperator];
+
+      state = state.copyWith(
+        registeredOperators: updatedList,
+        serverAuthToken: result.token,
+        isOfflineMode: result.isOfflineFallback,
+        isServerConnected: !result.isOfflineFallback,
+      );
+
+      _updateOperatorState(newOperator);
+      return true;
+    } else {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'An operator with this phone number already exists.',
+        errorMessage: result.errorMessage ?? 'Failed to register kiosk account on server.',
       );
       return false;
     }
-
-    const uuid = Uuid();
-    final newOperator = KioskOperator(
-      id: 'op-${uuid.v4().substring(0, 8)}',
-      fullName: cleanName,
-      phone: cleanPhone,
-      email: email?.trim().isEmpty ?? true ? null : email!.trim(),
-      role: role,
-      passwordHash: password.trim(),
-      pin: pin.trim(),
-      kioskName: cleanKiosk,
-      kioskAddress: kioskAddress?.trim(),
-      merchantUpiVpa: merchantUpiVpa?.trim().isNotEmpty ?? false ? merchantUpiVpa!.trim() : 'csckiosk@oksbi',
-      createdAt: DateTime.now(),
-      lastLoginAt: DateTime.now(),
-      avatarColorIndex: state.registeredOperators.length % 5,
-    );
-
-    final updatedList = [...state.registeredOperators, newOperator];
-    state = state.copyWith(
-      registeredOperators: updatedList,
-    );
-
-    _updateOperatorState(newOperator);
-    return true;
   }
 
   /// Lock Session with PIN Screen
@@ -246,6 +310,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(
       isAuthenticated: false,
       isPinLocked: false,
+      serverAuthToken: null,
       clearCurrentOperator: true,
       clearErrorMessage: true,
     );
@@ -260,7 +325,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void _updateOperatorState(KioskOperator operator) {
-    // Update Kiosk Settings in Sync with Operator's Center Details
     ref.read(kioskSettingsProvider.notifier).updateKioskInfo(
           name: operator.kioskName,
           address: operator.kioskAddress ?? '',
@@ -279,5 +343,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier(ref);
+  final serverAuthApi = ref.watch(serverAuthApiServiceProvider);
+  return AuthNotifier(ref, serverAuthApi);
 });
