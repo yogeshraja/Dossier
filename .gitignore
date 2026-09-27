@@ -7,9 +7,11 @@
 .buildlog/
 .history
 .idea/
-*.iml
-.vscode/
-devtools_options.yaml
+# Node / Backend
+backend/node_modules/
+backend/.wrangler/
+backend/dist/
+
 
 
 
