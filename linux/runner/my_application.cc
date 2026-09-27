@@ -101,9 +101,16 @@ static gboolean my_application_local_command_line(GApplication* application,
 
 // Implements GApplication::startup.
 static void my_application_startup(GApplication* application) {
-  // MyApplication* self = MY_APPLICATION(object);
-
-  // Perform any actions required at application startup.
+  // Ensure a valid fallback cursor theme is set on GTK default settings
+  GtkSettings* settings = gtk_settings_get_default();
+  if (settings != nullptr) {
+    gchar* theme = nullptr;
+    g_object_get(settings, "gtk-cursor-theme-name", &theme, nullptr);
+    if (theme == nullptr || strlen(theme) == 0) {
+      g_object_set(settings, "gtk-cursor-theme-name", "Adwaita", nullptr);
+    }
+    g_free(theme);
+  }
 
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
