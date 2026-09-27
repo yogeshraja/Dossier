@@ -152,6 +152,10 @@ class _ExhibitPreviewDialogState extends ConsumerState<ExhibitPreviewDialog> {
                     label: isPdf ? 'PDF DOCUMENT' : 'IMAGE',
                     variant: isPdf ? DossierBadgeVariant.warning : DossierBadgeVariant.success,
                   ),
+                  DossierBadge(
+                    label: widget.exhibit.remoteFileId != null ? 'DRIVE SYNCED' : 'PENDING SYNC',
+                    variant: widget.exhibit.remoteFileId != null ? DossierBadgeVariant.success : DossierBadgeVariant.neutral,
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
@@ -227,6 +231,14 @@ class _ExhibitPreviewDialogState extends ConsumerState<ExhibitPreviewDialog> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+              if (widget.exhibit.remoteFileId != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Text(
+                    'Google Drive ID: ${widget.exhibit.remoteFileId}',
+                    style: const TextStyle(fontSize: 10.5, color: Color(0xFF4285F4), fontWeight: FontWeight.w600),
+                  ),
+                ),
             ],
           ),
         ),
@@ -238,14 +250,30 @@ class _ExhibitPreviewDialogState extends ConsumerState<ExhibitPreviewDialog> {
           variant: DossierButtonVariant.danger,
           size: DossierButtonSize.sm,
           isLoading: _isDeleting,
+          tooltip: 'Delete exhibit from local and remote storage',
           onPressed: _handleDelete,
         ),
+        if (widget.exhibit.remoteFileId != null)
+          DossierButton(
+            text: 'Drive View',
+            icon: Icons.cloud_done_rounded,
+            variant: DossierButtonVariant.outline,
+            size: DossierButtonSize.sm,
+            tooltip: 'Open in Google Drive file viewer',
+            onPressed: () async {
+              final uri = Uri.parse('https://drive.google.com/file/d/${widget.exhibit.remoteFileId}/view');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+          ),
         if (hasLocalFile)
           DossierButton(
             text: 'Open Document',
             icon: Icons.open_in_new_rounded,
             variant: DossierButtonVariant.secondary,
             size: DossierButtonSize.sm,
+            tooltip: 'Open with default local application',
             onPressed: _openExternal,
           ),
         DossierButton(

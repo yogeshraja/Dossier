@@ -1,14 +1,22 @@
 # Project State & Memory: Dossier CRM & Kiosk Vault
 
 **Last Updated:** 2026-09-27  
-**Status:** Interactive Rainbow Button Hover Animations, Collapsible Sidebar Navigation, Google Fonts Typography, Material ListTile Fix, and 100% Tooltip Coverage (24/24 tests passing)
+**Status:** Google Drive Cloud Vault Integration, Offline SQLite Outbox Sync Worker, Google Drive Web Links, and Responsive Sync Activity Console (24/24 tests passing)
 
 ---
 
 ## 1. Project Overview & Architecture Decisions
 - **Stack:** Flutter 3.47.x (Dart 3.13.x) targeting Windows, Android, macOS, iOS, Linux, and Web (WASM).
-- **State Management:** Riverpod 2.x with reactive Drift SQLite stream providers.
+- **State Management:** Riverpod 2.x with reactive Drift SQLite stream providers and async sync notifiers.
 - **Local DB:** Drift (SQLite) with cross-platform native FFI and WASM + OPFS support.
+- **Google Drive Cloud Vault Integration (`lib/data/remote/gdrive/` & `lib/features/sync/`):**
+  - `GoogleDriveVaultService`: Multi-tier authentication supporting live Google OAuth2 (`google_sign_in` + `googleapis/drive/v3.dart`) and local sandbox mock fallback for zero-setup kiosk testing.
+  - Automatic Folder Hierarchy: Provisions `/Dossier_Workspace/<Customer_Phone_Name>/<Case_ID_Title>/<Exhibits>` in Google Drive with parent folder linking.
+  - Byte Streaming Upload: Native byte array and stream uploads with MIME type resolution and live progress callbacks (0-100%).
+  - Direct Drive Web Viewer: Generates web links (`https://drive.google.com/file/d/<fileId>/view`) for exhibits and `https://drive.google.com/drive/folders/<folderId>` for workspace folders.
+  - Outbox Sync Worker (`SyncNotifier` in `lib/features/sync/providers/sync_provider.dart`): Processes Drift SQLite `SyncQueue` mutations sequentially, uploads exhibits, persists remote IDs in `Exhibits.remoteFileId`, and transitions status to `SUCCESS` with retry tracking.
+  - `VaultSyncScreen`: Google Drive account connection card, "Open in Drive" web launcher, live sync progress bar, storage plan switcher, Drift SQLite Outbox table, and terminal-style audit log console.
+  - `ExhibitPreviewDialog`: Displays `DRIVE SYNCED` badge with file ID and 1-tap "Drive View" button.
 - **Visual Design & Typography:**
   - Integrated `google_fonts` (Plus Jakarta Sans) with crisp weights, tailored line heights, and high-contrast letter spacing.
   - Refined Slate 900 / Slate 50 design system with Deep Indigo 500, Violet 500, and Emerald 500 accents.

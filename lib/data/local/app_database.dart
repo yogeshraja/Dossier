@@ -124,6 +124,36 @@ class AppDatabase extends _$AppDatabase {
   Future<int> deleteDossier(String dossierId) =>
       (delete(dossiers)..where((tbl) => tbl.id.equals(dossierId))).go();
 
+  Future<int> updateExhibitRemoteId(String exhibitId, String remoteFileId) {
+    return (update(exhibits)..where((tbl) => tbl.id.equals(exhibitId))).write(
+      ExhibitsCompanion(remoteFileId: Value(remoteFileId)),
+    );
+  }
+
+  Future<int> updateDossierRemoteFolderId(String dossierId, String remoteFolderId) {
+    return (update(dossiers)..where((tbl) => tbl.id.equals(dossierId))).write(
+      DossiersCompanion(remoteFolderId: Value(remoteFolderId), updatedAt: Value(DateTime.now())),
+    );
+  }
+
+  Future<int> updateCaseRemoteFolderId(String caseId, String remoteFolderId) {
+    return (update(cases)..where((tbl) => tbl.id.equals(caseId))).write(
+      CasesCompanion(remoteFolderId: Value(remoteFolderId), updatedAt: Value(DateTime.now())),
+    );
+  }
+
+  Future<Exhibit?> getExhibitById(String exhibitId) {
+    return (select(exhibits)..where((tbl) => tbl.id.equals(exhibitId))).getSingleOrNull();
+  }
+
+  Future<Case?> getCaseById(String caseId) {
+    return (select(cases)..where((tbl) => tbl.id.equals(caseId))).getSingleOrNull();
+  }
+
+  Future<Dossier?> getDossierById(String dossierId) {
+    return (select(dossiers)..where((tbl) => tbl.id.equals(dossierId))).getSingleOrNull();
+  }
+
   // 5. Invoicing & Ledger
   Stream<List<Invoice>> watchRecentInvoices({int limit = 50}) {
     return (select(invoices)
@@ -143,10 +173,30 @@ class AppDatabase extends _$AppDatabase {
         .watch();
   }
 
+  Future<List<SyncQueueData>> getPendingSyncItems() {
+    return (select(syncQueue)
+          ..where((tbl) => tbl.syncStatus.equals('PENDING'))
+          ..orderBy([(tbl) => OrderingTerm.asc(tbl.scheduledAt)]))
+        .get();
+  }
+
   Future<int> enqueueSyncItem(SyncQueueCompanion entry) => into(syncQueue).insert(entry);
+  
+  Future<int> markSyncProcessing(int queueId) {
+    return (update(syncQueue)..where((tbl) => tbl.queueId.equals(queueId))).write(
+      const SyncQueueCompanion(syncStatus: Value('PROCESSING')),
+    );
+  }
+
   Future<int> markSyncSuccess(int queueId) {
     return (update(syncQueue)..where((tbl) => tbl.queueId.equals(queueId))).write(
       const SyncQueueCompanion(syncStatus: Value('SUCCESS')),
+    );
+  }
+
+  Future<int> markSyncFailed(int queueId) {
+    return (update(syncQueue)..where((tbl) => tbl.queueId.equals(queueId))).write(
+      const SyncQueueCompanion(syncStatus: Value('FAILED')),
     );
   }
 }
