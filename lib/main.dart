@@ -20,6 +20,7 @@ import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 import 'package:dossier/presentation/navigation/collapsible_sidebar.dart';
 import 'package:dossier/presentation/widgets/command_palette_dialog.dart';
+import 'package:dossier/presentation/widgets/kiosk_status_bar.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -202,6 +203,8 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
             ],
           ),
           actions: [
+            const KioskStatusBar(compact: true),
+            const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.search_rounded, size: 20),
               tooltip: 'Quick Search & Actions',
@@ -257,9 +260,74 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
               isInitiallyCollapsed: !isDesktop,
             ),
 
-            // Main Workspace View with animated transitions
+            // Main Workspace View with ambient header and animated transitions
             Expanded(
-              child: _buildAnimatedTabContent(_selectedTabIndex),
+              child: Column(
+                children: [
+                  // Workspace Top Ambient Header
+                  Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardTheme.color,
+                      border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor, width: 1)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Quick Search / Command Palette Hint Pill
+                        Flexible(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: _openCommandPalette,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.5)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.search_rounded, size: 14, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      isDesktop ? 'Search dossiers, cases, services...' : 'Quick Search...',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text('Ctrl K', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(width: 12),
+
+                        // Ambient Kiosk Status Bar
+                        KioskStatusBar(compact: !isDesktop),
+                      ],
+                    ),
+                  ),
+
+                  // Tab Content
+                  Expanded(
+                    child: _buildAnimatedTabContent(_selectedTabIndex),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

@@ -8,6 +8,9 @@ class AppThemes {
   static const Color glassBorderDark = Color(0x22FFFFFF); // Subtle white inner bevel
   static const Color glassBorderLight = Color(0x1F0F172A); // Subtle dark outer bevel
 
+  /// Monospaced numeric alignment font features
+  static const List<FontFeature> tabularFigures = [FontFeature.tabularFigures()];
+
   /// Helper to build glassmorphism decoration
   static BoxDecoration glassDecoration({
     required bool isDark,

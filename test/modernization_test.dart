@@ -8,6 +8,11 @@ import 'package:dossier/presentation/widgets/command_palette_dialog.dart';
 import 'package:dossier/features/billing_pos/widgets/quick_tender_pad.dart';
 import 'package:dossier/presentation/widgets/animated_thermal_receipt.dart';
 import 'package:dossier/presentation/widgets/sparkline_chart.dart';
+import 'package:dossier/presentation/widgets/case_stage_timeline.dart';
+import 'package:dossier/presentation/widgets/kiosk_status_bar.dart';
+import 'package:dossier/presentation/widgets/dossier_toast.dart';
+import 'package:dossier/features/dossiers/widgets/dossier_list_pane.dart';
+import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 
 void main() {
   group('Modernization Pillar Tests', () {
@@ -195,5 +200,137 @@ void main() {
 
       expect(navigatedTab, 2);
     });
+
+    testWidgets('6. CaseStageTimeline renders all milestone stages and triggers onStageChanged', (tester) async {
+      String? selectedStage;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppThemes.darkTheme,
+          home: Scaffold(
+            body: CaseStageTimeline(
+              currentStage: 'DOCS_PENDING',
+              uploadedDocsCount: 3,
+              totalRequiredDocs: 4,
+              onStageChanged: (st) => selectedStage = st,
+            ),
+          ),
+        ),
+      );
+
+      // Verify stage titles and document verification counter
+      expect(find.text('Docs Needed'), findsWidgets);
+      expect(find.text('Intake'), findsWidgets);
+      expect(find.text('Ready to Apply'), findsWidgets);
+      expect(find.text('Submitted'), findsWidgets);
+      expect(find.text('Ready for Pickup'), findsWidgets);
+      expect(find.text('Completed'), findsWidgets);
+      expect(find.text('Docs: 3/4 (75%)'), findsOneWidget);
+
+      // Tap on 'Ready to Apply' step node
+      await tester.tap(find.text('Ready to Apply').first);
+      await tester.pumpAndSettle();
+
+      expect(selectedStage, 'READY_TO_APPLY');
+    });
+
+    testWidgets('7. KioskStatusBar displays offline/synced pill and opens diagnostics', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            pendingSyncQueueStreamProvider.overrideWith((ref) => Stream.value([])),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: KioskStatusBar(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Offline Vault'), findsOneWidget);
+      expect(find.text('POS 58/80'), findsOneWidget);
+
+      // Tap the status bar to open diagnostics
+      await tester.tap(find.byType(KioskStatusBar));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kiosk Hardware & Vault Diagnostics'), findsOneWidget);
+      expect(find.text('Cloud Vault Engine'), findsOneWidget);
+      expect(find.text('ESC/POS Thermal Printer'), findsOneWidget);
+      expect(find.text('DRIVER READY'), findsOneWidget);
+    });
+
+    testWidgets('8. DossierToast renders and invokes action callbacks', (tester) async {
+      bool actionTriggered = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () {
+                  DossierToast.show(
+                    context,
+                    title: 'Customer Case Synced',
+                    message: 'Uploaded exhibits to Google Drive',
+                    variant: DossierToastVariant.success,
+                    actionLabel: 'View Receipt',
+                    onAction: () => actionTriggered = true,
+                  );
+                },
+                child: const Text('Show Toast'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show Toast'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Customer Case Synced'), findsOneWidget);
+      expect(find.text('Uploaded exhibits to Google Drive'), findsOneWidget);
+      expect(find.text('View Receipt'), findsOneWidget);
+
+      await tester.tap(find.text('View Receipt'));
+      await tester.pump();
+
+      expect(actionTriggered, isTrue);
+    });
+
+    testWidgets('9. DossierListPane displays filter chips for All, Active Jobs, Pending Docs, and Unpaid Dues', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            dossiersStreamProvider.overrideWith((ref) => Stream.value([])),
+            allCasesStreamProvider.overrideWith((ref) => Stream.value([])),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: DossierListPane(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dossiers'), findsOneWidget);
+      expect(find.text('All'), findsOneWidget);
+      expect(find.text('Active Jobs'), findsOneWidget);
+      expect(find.text('Pending Docs'), findsOneWidget);
+      expect(find.text('Unpaid Dues'), findsOneWidget);
+
+      // Tap on 'Pending Docs' chip
+      await tester.tap(find.text('Pending Docs'));
+      await tester.pumpAndSettle();
+    });
   });
 }
+

@@ -11,11 +11,30 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 // Search Query State
 final dossierSearchQueryProvider = StateProvider<String>((ref) => '');
 
+// Dossier Filter Category
+enum DossierFilterCategory {
+  all('All'),
+  activeJobs('Active Jobs'),
+  pendingDocs('Pending Docs'),
+  unpaidDues('Unpaid Dues');
+
+  final String label;
+  const DossierFilterCategory(this.label);
+}
+
+final dossierFilterProvider = StateProvider<DossierFilterCategory>((ref) => DossierFilterCategory.all);
+
 // Reactive Dossiers List
 final dossiersStreamProvider = StreamProvider<List<Dossier>>((ref) {
   final db = ref.watch(databaseProvider);
   final query = ref.watch(dossierSearchQueryProvider);
   return db.searchDossiers(query);
+});
+
+// All Cases in System Stream
+final allCasesStreamProvider = StreamProvider<List<Case>>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db.watchAllCases();
 });
 
 // Selected Dossier State

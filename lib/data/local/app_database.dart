@@ -69,6 +69,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // 3. Cases & Job Lifecycle
+  Stream<List<Case>> watchAllCases() {
+    return (select(cases)..orderBy([(tbl) => OrderingTerm.desc(tbl.createdAt)])).watch();
+  }
+
   Stream<List<Case>> watchCasesForDossier(String dossierId) {
     return (select(cases)
           ..where((tbl) => tbl.dossierId.equals(dossierId))

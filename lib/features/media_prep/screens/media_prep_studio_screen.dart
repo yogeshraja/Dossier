@@ -836,18 +836,46 @@ class _MediaPrepStudioScreenState extends ConsumerState<MediaPrepStudioScreen> w
         if (_compressedResult != null) ...[
           const SizedBox(height: 16),
           DossierCard(
-            variant: DossierCardVariant.flat,
-            padding: const EdgeInsets.all(12),
+            variant: DossierCardVariant.glass,
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Original: ${(_originalSize / 1024).toStringAsFixed(1)} KB', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                const SizedBox(height: 2),
-                Text('Compressed: ${(_compressedSize / 1024).toStringAsFixed(1)} KB',
-                    style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
-                const SizedBox(height: 2),
-                Text('Reduced by: ${((1 - (_compressedSize / _originalSize)) * 100).toStringAsFixed(0)}%',
-                    style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Compression Ratio', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                      ),
+                      child: Text(
+                        '-${((1 - (_compressedSize / _originalSize)) * 100).toStringAsFixed(0)}% REDUCED',
+                        style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                LinearProgressIndicator(
+                  value: (_compressedSize / _originalSize).clamp(0.05, 1.0),
+                  backgroundColor: Theme.of(context).dividerColor,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF10B981)),
+                  borderRadius: BorderRadius.circular(4),
+                  minHeight: 6,
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Original: ${(_originalSize / 1024).toStringAsFixed(1)} KB', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text('Result: ${(_compressedSize / 1024).toStringAsFixed(1)} KB',
+                        style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
               ],
             ),
           ),

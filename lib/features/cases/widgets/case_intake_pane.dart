@@ -14,37 +14,10 @@ import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 import 'package:dossier/presentation/common_widgets/dossier_panel.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
+import 'package:dossier/presentation/widgets/case_stage_timeline.dart';
 
 class CaseIntakePane extends ConsumerWidget {
   const CaseIntakePane({super.key});
-
-  static const _stages = [
-    {'key': 'DRAFT', 'label': 'Draft', 'icon': Icons.edit_note_rounded},
-    {'key': 'DOCS_PENDING', 'label': 'Docs Pending', 'icon': Icons.pending_actions_rounded},
-    {'key': 'READY_TO_APPLY', 'label': 'Ready to Apply', 'icon': Icons.fact_check_rounded},
-    {'key': 'SUBMITTED', 'label': 'Submitted', 'icon': Icons.cloud_upload_rounded},
-    {'key': 'READY_FOR_PICKUP', 'label': 'Ready for Pickup', 'icon': Icons.assignment_turned_in_rounded},
-    {'key': 'CLOSED', 'label': 'Closed', 'icon': Icons.check_circle_rounded},
-  ];
-
-  Color _getStageColor(String stage) {
-    switch (stage) {
-      case 'DRAFT':
-        return Colors.grey;
-      case 'DOCS_PENDING':
-        return Colors.orangeAccent;
-      case 'READY_TO_APPLY':
-        return Colors.cyan;
-      case 'SUBMITTED':
-        return Colors.blueAccent;
-      case 'READY_FOR_PICKUP':
-        return const Color(0xFF10B981);
-      case 'CLOSED':
-        return const Color(0xFF6366F1);
-      default:
-        return Colors.grey;
-    }
-  }
 
   Future<void> _updateStage(WidgetRef ref, String caseId, String newStage) async {
     final db = ref.read(databaseProvider);
@@ -330,40 +303,11 @@ class CaseIntakePane extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // Stage Lifecycle Stepper
-                              const Text('Lifecycle Stage Progression:', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 8),
-                              SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: _stages.map((st) {
-                                    final isCurrent = activeCase.stage == st['key'];
-                                    final isPassed = _stages.indexWhere((s) => s['key'] == activeCase.stage) >= _stages.indexOf(st);
-                                    final stageColor = _getStageColor(st['key'] as String);
-
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 6.0),
-                                      child: ActionChip(
-                                        avatar: Icon(
-                                          st['icon'] as IconData,
-                                          size: 14,
-                                          color: isCurrent ? Colors.white : (isPassed ? stageColor : Colors.grey),
-                                        ),
-                                        label: Text(
-                                          st['label'] as String,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                                            color: isCurrent ? Colors.white : (isPassed ? stageColor : Colors.grey),
-                                          ),
-                                        ),
-                                        visualDensity: VisualDensity.compact,
-                                        backgroundColor: isCurrent ? stageColor.withValues(alpha: 0.8) : Theme.of(context).cardTheme.color,
-                                        side: BorderSide(color: isCurrent ? stageColor : Theme.of(context).dividerColor),
-                                        onPressed: () => _updateStage(ref, activeCase.id, st['key'] as String),
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
+                              CaseStageTimeline(
+                                currentStage: activeCase.stage,
+                                uploadedDocsCount: exhibitsAsync.value?.length ?? 0,
+                                totalRequiredDocs: 3,
+                                onStageChanged: (newStage) => _updateStage(ref, activeCase.id, newStage),
                               ),
                               const SizedBox(height: 16),
 

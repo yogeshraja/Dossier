@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dossier/app/theme.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/dossiers/widgets/new_dossier_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
@@ -14,9 +15,13 @@ class DossierListPane extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dossiersAsync = ref.watch(dossiersStreamProvider);
+    final allCasesAsync = ref.watch(allCasesStreamProvider);
     final activeDossier = ref.watch(activeDossierProvider);
     final searchQuery = ref.watch(dossierSearchQueryProvider);
+    final activeFilter = ref.watch(dossierFilterProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final allCases = allCasesAsync.asData?.value ?? [];
 
     return Container(
       width: width,
@@ -73,6 +78,46 @@ class DossierListPane extends ConsumerWidget {
                   showClearButton: true,
                   onChanged: (val) => ref.read(dossierSearchQueryProvider.notifier).state = val,
                 ),
+                const SizedBox(height: 10),
+
+                // Smart Filter Chips
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: DossierFilterCategory.values.map((cat) {
+                      final isSelected = activeFilter == cat;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6.0),
+                        child: ChoiceChip(
+                          label: Text(
+                            cat.label,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: const Color(0xFF6366F1),
+                          backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          side: BorderSide(
+                            color: isSelected
+                                ? const Color(0xFF6366F1)
+                                : Theme.of(context).dividerColor.withValues(alpha: 0.6),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          onSelected: (_) {
+                            ref.read(dossierFilterProvider.notifier).state = cat;
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ],
             ),
           ),
@@ -82,7 +127,22 @@ class DossierListPane extends ConsumerWidget {
           Expanded(
             child: dossiersAsync.when(
               data: (dossiers) {
-                if (dossiers.isEmpty) {
+                // Apply smart filter logic
+                final filteredList = dossiers.where((d) {
+                  final customerCases = allCases.where((c) => c.dossierId == d.id).toList();
+                  switch (activeFilter) {
+                    case DossierFilterCategory.all:
+                      return true;
+                    case DossierFilterCategory.activeJobs:
+                      return customerCases.any((c) => c.stage != 'COMPLETED');
+                    case DossierFilterCategory.pendingDocs:
+                      return customerCases.any((c) => c.stage == 'DOCS_NEEDED' || c.stage == 'INTAKE');
+                    case DossierFilterCategory.unpaidDues:
+                      return customerCases.any((c) => (c.totalEstimatedAmount - c.advancePaid) > 0);
+                  }
+                }).toList();
+
+                if (filteredList.isEmpty) {
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -91,7 +151,13 @@ class DossierListPane extends ConsumerWidget {
                         children: [
                           Icon(Icons.person_search_rounded, size: 36, color: Colors.grey[500]),
                           const SizedBox(height: 8),
-                          Text('No customers found', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+                          Text(
+                            activeFilter == DossierFilterCategory.all
+                                ? 'No customers found'
+                                : 'No matching dossiers for ${activeFilter.label}',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                          ),
                         ],
                       ),
                     ),
@@ -99,12 +165,29 @@ class DossierListPane extends ConsumerWidget {
                 }
 
                 return ListView.separated(
-                  itemCount: dossiers.length,
+                  itemCount: filteredList.length,
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  separatorBuilder: (context, _) => Divider(height: 1, color: Theme.of(context).dividerColor.withValues(alpha: 0.4)),
+                  separatorBuilder: (context, _) =>
+                      Divider(height: 1, color: Theme.of(context).dividerColor.withValues(alpha: 0.4)),
                   itemBuilder: (context, index) {
-                    final d = dossiers[index];
+                    final d = filteredList[index];
                     final isSelected = activeDossier?.id == d.id;
+                    final customerCases = allCases.where((c) => c.dossierId == d.id).toList();
+
+                    // Urgency ring logic
+                    final hasPendingDocs = customerCases.any((c) => c.stage == 'DOCS_NEEDED');
+                    final isReadyForPickup = customerCases.any((c) => c.stage == 'READY_FOR_PICKUP');
+                    final totalDues = customerCases.fold<double>(
+                      0.0,
+                      (sum, c) => sum + (c.totalEstimatedAmount - c.advancePaid).clamp(0.0, double.infinity),
+                    );
+
+                    Color ringColor = Colors.transparent;
+                    if (hasPendingDocs) {
+                      ringColor = const Color(0xFFF59E0B); // Amber
+                    } else if (isReadyForPickup) {
+                      ringColor = const Color(0xFF10B981); // Emerald
+                    }
 
                     return Material(
                       color: isSelected
@@ -127,23 +210,38 @@ class DossierListPane extends ConsumerWidget {
                           ),
                           child: Row(
                             children: [
+                              // Avatar with Urgency Ring
                               Container(
-                                width: 34,
-                                height: 34,
+                                width: 36,
+                                height: 36,
                                 decoration: BoxDecoration(
-                                  gradient: isSelected
-                                      ? const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)])
-                                      : null,
-                                  color: isSelected ? null : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
                                   shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: ringColor != Colors.transparent ? ringColor : Colors.transparent,
+                                    width: ringColor != Colors.transparent ? 2.2 : 0,
+                                  ),
                                 ),
-                                child: Center(
-                                  child: Text(
-                                    d.fullName.isNotEmpty ? d.fullName[0].toUpperCase() : '?',
-                                    style: TextStyle(
-                                      color: isSelected ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF334155)),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
+                                padding: EdgeInsets.all(ringColor != Colors.transparent ? 2 : 0),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: isSelected
+                                        ? const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)])
+                                        : null,
+                                    color: isSelected
+                                        ? null
+                                        : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      d.fullName.isNotEmpty ? d.fullName[0].toUpperCase() : '?',
+                                      style: TextStyle(
+                                        color: isSelected
+                                            ? Colors.white
+                                            : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -153,15 +251,39 @@ class DossierListPane extends ConsumerWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      d.fullName,
-                                      style: TextStyle(
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                        fontSize: 13.5,
-                                        color: isSelected ? Theme.of(context).colorScheme.primary : null,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            d.fullName,
+                                            style: TextStyle(
+                                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                              fontSize: 13.5,
+                                              color: isSelected ? Theme.of(context).colorScheme.primary : null,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (totalDues > 0)
+                                          Container(
+                                            margin: const EdgeInsets.only(left: 4),
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              'Due ₹${totalDues.toStringAsFixed(0)}',
+                                              style: TextStyle(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: const Color(0xFFEF4444),
+                                                fontFeatures: AppThemes.tabularFigures,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                     const SizedBox(height: 2),
                                     Row(
@@ -171,18 +293,41 @@ class DossierListPane extends ConsumerWidget {
                                         Expanded(
                                           child: Text(
                                             d.phoneNumber,
-                                            style: TextStyle(color: Colors.grey[500], fontSize: 11.5),
+                                            style: TextStyle(
+                                              color: Colors.grey[500],
+                                              fontSize: 11.5,
+                                              fontFeatures: AppThemes.tabularFigures,
+                                            ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
+                                        if (hasPendingDocs)
+                                          const Text(
+                                            'Docs Req.',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Color(0xFFF59E0B),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          )
+                                        else if (isReadyForPickup)
+                                          const Text(
+                                            'Ready',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Color(0xFF10B981),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ],
                                 ),
                               ),
                               if (isSelected)
-                                Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.primary, size: 18),
+                                Icon(Icons.chevron_right_rounded,
+                                    color: Theme.of(context).colorScheme.primary, size: 18),
                             ],
                           ),
                         ),
@@ -192,7 +337,8 @@ class DossierListPane extends ConsumerWidget {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(child: Text('Error: $err', style: const TextStyle(color: Colors.redAccent))),
+              error: (err, _) =>
+                  Center(child: Text('Error: $err', style: const TextStyle(color: Colors.redAccent))),
             ),
           ),
         ],
