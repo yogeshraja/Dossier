@@ -83,6 +83,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
 
     try {
       final db = ref.read(databaseProvider);
+      await InitialDataSeeder.cleanDummyData(db);
       await InitialDataSeeder.seedDatabase(db);
     } catch (_) {}
 

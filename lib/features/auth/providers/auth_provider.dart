@@ -13,7 +13,7 @@ class AuthState {
   final bool rememberMe;
 
   const AuthState({
-    required this.registeredOperators,
+    this.registeredOperators = const [],
     this.currentOperator,
     this.isAuthenticated = false,
     this.isPinLocked = false,
@@ -21,6 +21,8 @@ class AuthState {
     this.errorMessage,
     this.rememberMe = true,
   });
+
+  bool get hasRegisteredOperators => registeredOperators.isNotEmpty;
 
   AuthState copyWith({
     List<KioskOperator>? registeredOperators,
@@ -50,43 +52,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this.ref)
       : super(
-          AuthState(
-            registeredOperators: _defaultSeededOperators,
+          const AuthState(
+            registeredOperators: [],
             currentOperator: null,
             isAuthenticated: false,
           ),
         );
-
-  static final List<KioskOperator> _defaultSeededOperators = [
-    KioskOperator(
-      id: 'op-admin-001',
-      fullName: 'Ramesh Sharma',
-      phone: '9876543210',
-      email: 'ramesh.csc@dossier.local',
-      role: OperatorRole.admin,
-      passwordHash: 'admin123',
-      pin: '1234',
-      kioskName: 'Main Market CSC & Cyber Hub',
-      kioskAddress: 'Shop #4, Near Post Office, Main Road',
-      merchantUpiVpa: 'csckiosk@oksbi',
-      createdAt: DateTime(2026, 1, 1),
-      avatarColorIndex: 0,
-    ),
-    KioskOperator(
-      id: 'op-staff-002',
-      fullName: 'Priya Verma',
-      phone: '9876543211',
-      email: 'priya.operator@dossier.local',
-      role: OperatorRole.operator,
-      passwordHash: 'staff123',
-      pin: '5678',
-      kioskName: 'Main Market CSC & Cyber Hub',
-      kioskAddress: 'Shop #4, Near Post Office, Main Road',
-      merchantUpiVpa: 'csckiosk@oksbi',
-      createdAt: DateTime(2026, 2, 1),
-      avatarColorIndex: 1,
-    ),
-  ];
 
   /// Sign in with Phone/Email and Password
   Future<bool> signInWithCredentials({
@@ -94,10 +65,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String password,
   }) async {
     state = state.copyWith(isLoading: true, clearErrorMessage: true);
-    await Future.delayed(const Duration(milliseconds: 300)); // Smooth UX transition
+    await Future.delayed(const Duration(milliseconds: 200));
 
     final cleanId = identifier.trim().toLowerCase().replaceAll(RegExp(r'[\s\-+]'), '');
     final cleanPwd = password.trim();
+
+    if (state.registeredOperators.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'No operator account found. Please set up your kiosk first.',
+      );
+      return false;
+    }
 
     final matched = state.registeredOperators.where((op) {
       final opPhone = op.phone.replaceAll(RegExp(r'[\s\-+]'), '');
@@ -126,11 +105,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? operatorId,
   }) async {
     state = state.copyWith(isLoading: true, clearErrorMessage: true);
-    await Future.delayed(const Duration(milliseconds: 200));
+    await Future.delayed(const Duration(milliseconds: 150));
 
     final cleanPin = pin.trim();
-    KioskOperator? matched;
+    if (state.registeredOperators.isEmpty) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'No registered operators found.',
+      );
+      return false;
+    }
 
+    KioskOperator? matched;
     if (operatorId != null) {
       final op = state.registeredOperators.firstWhere(
         (o) => o.id == operatorId,
@@ -177,7 +163,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? kioskAddress,
   }) async {
     state = state.copyWith(isLoading: true, clearErrorMessage: true);
-    await Future.delayed(const Duration(milliseconds: 350));
+    await Future.delayed(const Duration(milliseconds: 250));
 
     final cleanPhone = phone.trim();
     final cleanName = operatorName.trim();
@@ -230,19 +216,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return true;
   }
 
-  /// Quick Demo / Fast Access Login (e.g. for testing & showcase)
-  Future<void> quickDemoLogin({String? operatorId}) async {
-    state = state.copyWith(isLoading: true, clearErrorMessage: true);
-    await Future.delayed(const Duration(milliseconds: 150));
-
-    final target = operatorId != null
-        ? state.registeredOperators.firstWhere((o) => o.id == operatorId, orElse: () => state.registeredOperators.first)
-        : state.registeredOperators.first;
-
-    final updated = target.copyWith(lastLoginAt: DateTime.now());
-    _updateOperatorState(updated);
-  }
-
   /// Lock Session with PIN Screen
   void lockSession() {
     state = state.copyWith(isPinLocked: true);
@@ -290,7 +263,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Update Kiosk Settings in Sync with Operator's Center Details
     ref.read(kioskSettingsProvider.notifier).updateKioskInfo(
           name: operator.kioskName,
-          address: operator.kioskAddress ?? 'Shop #4, Near Post Office',
+          address: operator.kioskAddress ?? '',
           phone: operator.phone,
           upiVpa: operator.merchantUpiVpa ?? 'csckiosk@oksbi',
         );

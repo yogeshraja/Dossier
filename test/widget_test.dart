@@ -9,6 +9,9 @@ import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
 import 'package:dossier/features/settings/screens/settings_screen.dart';
 import 'package:dossier/features/auth/screens/auth_screen.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
+import 'package:dossier/features/cases/widgets/attach_document_dialog.dart';
+import 'package:dossier/features/cases/widgets/exhibit_preview_dialog.dart';
+import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
@@ -435,8 +438,12 @@ void main() {
 
       await tester.pump();
 
-      // Switch to PIN mode
-      await tester.tap(find.byIcon(Icons.dialpad_rounded));
+      // Switch to Operator Sign-In first
+      await tester.tap(find.text('Operator Sign-In'));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Switch to PIN mode via "Use PIN"
+      await tester.tap(find.text('Use PIN'));
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('Quick PIN Unlock'), findsOneWidget);
@@ -461,20 +468,24 @@ void main() {
 
       final notifier = container.read(authProvider.notifier);
 
-      // Initial state
+      // Initial clean state - no dummy operators
       expect(container.read(authProvider).isAuthenticated, isFalse);
-      expect(container.read(authProvider).registeredOperators.length, 2);
+      expect(container.read(authProvider).registeredOperators.length, 0);
 
-      // Sign In with valid credentials
-      final success = await notifier.signInWithCredentials(
-        identifier: '9876543210',
-        password: 'admin123',
+      // 1. Sign up master operator
+      final regSuccess = await notifier.signUp(
+        kioskName: 'Digital Seva CSC Kiosk',
+        operatorName: 'Sunil Kumar',
+        phone: '9876543210',
+        password: 'securepassword123',
+        pin: '1234',
       );
-      expect(success, isTrue);
+      expect(regSuccess, isTrue);
       expect(container.read(authProvider).isAuthenticated, isTrue);
-      expect(container.read(authProvider).currentOperator?.fullName, 'Ramesh Sharma');
+      expect(container.read(authProvider).currentOperator?.fullName, 'Sunil Kumar');
+      expect(container.read(authProvider).registeredOperators.length, 1);
 
-      // Lock session and unlock with PIN
+      // 2. Lock session and unlock with PIN
       notifier.lockSession();
       expect(container.read(authProvider).isPinLocked, isTrue);
 
@@ -482,23 +493,73 @@ void main() {
       expect(unlocked, isTrue);
       expect(container.read(authProvider).isPinLocked, isFalse);
 
-      // Sign up new operator
-      final regSuccess = await notifier.signUp(
-        kioskName: 'Tech Seva Center',
-        operatorName: 'Amit Patel',
-        phone: '9988776655',
-        password: 'secretpassword',
-        pin: '9876',
-      );
-      expect(regSuccess, isTrue);
-      expect(container.read(authProvider).registeredOperators.length, 3);
-      expect(container.read(authProvider).currentOperator?.fullName, 'Amit Patel');
-
-      // Logout
+      // 3. Logout
       notifier.logout();
       expect(container.read(authProvider).isAuthenticated, isFalse);
       expect(container.read(authProvider).currentOperator, isNull);
+
+      // 4. Sign In with valid credentials
+      final loginSuccess = await notifier.signInWithCredentials(
+        identifier: '9876543210',
+        password: 'securepassword123',
+      );
+      expect(loginSuccess, isTrue);
+      expect(container.read(authProvider).isAuthenticated, isTrue);
+      expect(container.read(authProvider).currentOperator?.fullName, 'Sunil Kumar');
+    });
+  });
+
+  group('Attachment Workflow Tests', () {
+    testWidgets('AttachDocumentDialog renders all document classification chips and upload surface', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: AttachDocumentDialog(caseId: 'test-case-123'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(find.text('Attach Case Documents'), findsOneWidget);
+      expect(find.text('Aadhaar Front'), findsOneWidget);
+      expect(find.text('Aadhaar Back'), findsOneWidget);
+      expect(find.text('Passport Photo'), findsOneWidget);
+      expect(find.text('Click to Browse & Attach Real Files'), findsOneWidget);
+    });
+
+    testWidgets('ExhibitPreviewDialog renders exhibit metadata and actions', (WidgetTester tester) async {
+      final dummyExhibit = Exhibit(
+        id: 'ex-001',
+        caseId: 'case-123',
+        slotType: 'Aadhaar Front',
+        fileName: 'aadhaar_card_front.jpg',
+        mimeType: 'image/jpeg',
+        localPath: '/tmp/test_aadhaar.jpg',
+        fileSizeBytes: 204800,
+        isStitched: false,
+        createdAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: ExhibitPreviewDialog(exhibit: dummyExhibit),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(find.text('Aadhaar Front'), findsWidgets);
+      expect(find.text('aadhaar_card_front.jpg'), findsOneWidget);
+      expect(find.text('200.0 KB'), findsOneWidget);
+      expect(find.text('Delete'), findsOneWidget);
+      expect(find.text('Close'), findsOneWidget);
     });
   });
 }
+
 

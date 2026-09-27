@@ -1,7 +1,7 @@
 # Project State & Memory: Dossier CRM & Kiosk Vault
 
-**Last Updated:** 2026-09-26  
-**Status:** Offline-First Sign-In & Sign-Up Workflow, Multi-Operator Shift Switching, and Quick PIN Unlock Implemented & Verified (21/21 tests passing)
+**Last Updated:** 2026-09-27  
+**Status:** Real Attachment Workflows, Document Previews & Deletions, Media Prep File Processing, and Zero-Dummy-Data Architecture Implemented & Verified (23/23 tests passing)
 
 ---
 
@@ -9,30 +9,31 @@
 - **Stack:** Flutter 3.47.x (Dart 3.13.x) targeting Windows, Android, macOS, iOS, Linux, and Web (WASM).
 - **State Management:** Riverpod 2.x with reactive Drift SQLite stream providers.
 - **Local DB:** Drift (SQLite) with cross-platform native FFI and WASM + OPFS support.
+- **Zero Dummy Data Architecture:**
+  - Removed all hardcoded mock customers, cases, and operators from initial database seeders.
+  - Added `InitialDataSeeder.cleanDummyData()` to purge any legacy mock data.
+  - Replaced hardcoded form strings with clean empty states prompting real operator input and first-time kiosk setup.
+- **Attachment & Document Management Workflows:**
+  - `AttachDocumentDialog` (`lib/features/cases/widgets/attach_document_dialog.dart`): Real multi-file picker via `FilePicker` (JPG, PNG, PDF, WebP, BMP, TIFF), document slot classifier (Aadhaar Front/Back, Passport Photo, PAN Card, Income Certificate, Signature, etc.), live file size formatting, and batch database insertion.
+  - `ExhibitPreviewDialog` (`lib/features/cases/widgets/exhibit_preview_dialog.dart`): Interactive document viewer supporting image zoom/pan (`InteractiveViewer`), PDF document cards, external system file launch via `url_launcher`, and permanent deletion from SQLite.
+  - `CaseIntakePane` (`lib/features/cases/widgets/case_intake_pane.dart`): Real local file thumbnails and interactive attachment triggers.
+- **Media Prep Studio (`lib/features/media_prep/screens/media_prep_studio_screen.dart`):**
+  - Integrated real `FilePicker` into ID Card Stitcher (Front & Back card picks), DCT Quantized Compressor (target KB bounds), and Passport Photo Grid generator.
+  - Background isolate compute via pure Dart (`MediaPrepService`) for seamless 60fps rendering.
 - **Authentication & Multi-Operator Workflow (`lib/features/auth/`):**
   - `KioskOperator` model: Encapsulates operator profile, assigned role (`admin`, `manager`, `operator`), phone/email identifier, password, 4-digit PIN, and kiosk center details.
-  - `authProvider` (`AuthNotifier`): Offline-first authentication controller supporting password sign-in, quick 4-digit PIN unlock, new kiosk registration (onboarding), operator session locking, and fast 1-tap demo logins.
+  - `authProvider` (`AuthNotifier`): Offline-first authentication controller supporting password sign-in, quick 4-digit PIN unlock, new kiosk registration (onboarding), operator session locking.
   - `AuthScreen` (`lib/features/auth/screens/auth_screen.dart`): Material Design 3 responsive auth interface with fluid tab transitions between Operator Sign-In and New Kiosk Setup.
-    - Two-column showcase layout for desktop/tablet (with branded hero panel and feature highlights) and single-column centered layout for mobile.
-    - Interactive 3x4 numeric keypad for 4-digit PIN quick unlocks.
-  - Session Integration:
-    - `SplashScreen` routes to `AuthScreen` when unauthenticated, and `KioskWorkstationHome` when authenticated.
-    - Workstation shell features an Operator avatar pill with quick session management (switch operator shift, lock terminal, log out).
-    - Settings screen includes dedicated Operator Profile management.
 - **Component Design System (`lib/presentation/common_widgets/`):**
-  - `DossierButton`: Parametric variants (primary, secondary, outline, danger, success, warning, ghost), sizes (sm, md, lg), press scale micro-animation, hover glow, and loading state.
-  - `DossierCard`: Parametric variants (elevated, outlined, glass, flat, gradient), tap scale & hover elevation, custom badges, headers, and footers.
-  - `DossierInputField`: Floating labels, clear button, password reveal toggle, search variant, custom borders, and focused glow ring.
-  - `DossierPanel`: Expandable/collapsible workstation sections with animated height and rotation transitions.
-  - `DossierBadge`: Color-coded semantic tags with optional pulse animation.
-  - `DossierDialog`: Reusable modal container with smooth scale-and-fade entry transitions.
+  - `DossierButton`, `DossierCard`, `DossierInputField`, `DossierPanel`, `DossierBadge`, `DossierDialog`.
 - **Test Suite (`test/widget_test.dart`):**
-  - 21 comprehensive test suites verifying Splash boot sequence, multi-resolution responsiveness (Desktop 1440px, Tablet 768px, Mobile 390px, Small Screen 320px), component interactions, and complete Auth flows with zero RenderFlex overflows.
+  - 23 comprehensive test suites verifying Splash boot sequence, multi-resolution responsiveness (Desktop 1440px, Tablet 768px, Mobile 390px, Small Screen 320px), component interactions, Auth flows, Attachment Dialogs, and Exhibit Previews with zero RenderFlex overflows.
 
 ---
 
 ## 2. Commit History
-- `[HEAD]`: `feat(auth): add offline-first Sign-In, Sign-Up, and Quick 4-Digit PIN unlock workflow with multi-operator switching`
+- `[HEAD]`: `feat(attachments): implement real file picking, document preview, exhibit deletion, and zero-dummy-data clean state`
+- `[PREV]`: `feat(auth): add offline-first Sign-In, Sign-Up, and Quick 4-Digit PIN unlock workflow with multi-operator switching`
 - `eb7a9cc`: `fix(ui): ensure strict Material 3 compliance, fluid animation curves, and zero overflow layout across all resolutions`
 - `e5d9dec`: `feat(ui): add animated splash screen, interactive micro-animations, and parameterized component library`
 - `741a9b1`: `fix(responsive): eliminate layout overflows across mobile, tablet, and desktop viewports`

@@ -62,6 +62,7 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
 
   Future<void> _seedInitialData() async {
     final db = ref.read(databaseProvider);
+    await InitialDataSeeder.cleanDummyData(db);
     await InitialDataSeeder.seedDatabase(db);
   }
 

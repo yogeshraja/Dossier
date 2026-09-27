@@ -1,16 +1,17 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' as drift;
 import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/features/cases/widgets/new_case_dialog.dart';
+import 'package:dossier/features/cases/widgets/attach_document_dialog.dart';
+import 'package:dossier/features/cases/widgets/exhibit_preview_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 import 'package:dossier/presentation/common_widgets/dossier_panel.dart';
-import 'package:uuid/uuid.dart';
 
 class CaseIntakePane extends ConsumerWidget {
   const CaseIntakePane({super.key});
@@ -48,21 +49,17 @@ class CaseIntakePane extends ConsumerWidget {
     await db.updateCaseStage(caseId, newStage);
   }
 
-  Future<void> _addSimulatedExhibit(WidgetRef ref, String caseId, String slotType) async {
-    final db = ref.read(databaseProvider);
-    const uuid = Uuid();
-    final fileName = '${slotType}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+  void _openAttachDialog(BuildContext context, String caseId, [String? initialSlot]) {
+    DossierDialog.show(
+      context: context,
+      builder: (_) => AttachDocumentDialog(caseId: caseId, initialSlotType: initialSlot),
+    );
+  }
 
-    await db.insertExhibit(
-      ExhibitsCompanion.insert(
-        id: uuid.v4(),
-        caseId: caseId,
-        slotType: slotType,
-        fileName: fileName,
-        mimeType: 'image/jpeg',
-        fileSizeBytes: 145000, // 145 KB
-        localPath: drift.Value('/storage/emulated/0/Dossier/$fileName'),
-      ),
+  void _openExhibitPreview(BuildContext context, Exhibit exhibit) {
+    DossierDialog.show(
+      context: context,
+      builder: (_) => ExhibitPreviewDialog(exhibit: exhibit),
     );
   }
 
@@ -320,7 +317,7 @@ class CaseIntakePane extends ConsumerWidget {
                               // Document Exhibits Slot Manager via DossierPanel
                               DossierPanel(
                                 title: 'Case Exhibits & Scanned Artifacts',
-                                subtitle: 'Local encrypted document cache',
+                                subtitle: 'Local document vault & exhibits repository',
                                 leading: const Icon(Icons.inventory_2_rounded, size: 18, color: Color(0xFF6366F1)),
                                 badge: exhibitsAsync.maybeWhen(
                                   data: (ex) => DossierBadge(label: '${ex.length}', variant: DossierBadgeVariant.neutral),
@@ -328,11 +325,11 @@ class CaseIntakePane extends ConsumerWidget {
                                 ),
                                 actions: [
                                   DossierButton(
-                                    text: 'Attach Scanned Doc',
+                                    text: 'Attach Document',
                                     icon: Icons.attach_file_rounded,
                                     size: DossierButtonSize.sm,
-                                    variant: DossierButtonVariant.ghost,
-                                    onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'ATTACHMENT'),
+                                    variant: DossierButtonVariant.primary,
+                                    onPressed: () => _openAttachDialog(context, activeCase.id),
                                   ),
                                 ],
                                 child: exhibitsAsync.when(
@@ -343,10 +340,10 @@ class CaseIntakePane extends ConsumerWidget {
                                         padding: const EdgeInsets.all(16),
                                         child: Column(
                                           children: [
-                                            Icon(Icons.cloud_upload_outlined, size: 32, color: Colors.grey[500]),
+                                            Icon(Icons.file_present_rounded, size: 36, color: Colors.grey[500]),
                                             const SizedBox(height: 6),
-                                            const Text('No exhibits attached yet', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                            const SizedBox(height: 10),
+                                            const Text('No documents or exhibits attached yet', style: TextStyle(color: Colors.grey, fontSize: 12.5)),
+                                            const SizedBox(height: 12),
                                             Wrap(
                                               spacing: 8,
                                               runSpacing: 8,
@@ -356,21 +353,35 @@ class CaseIntakePane extends ConsumerWidget {
                                                   icon: Icons.badge_rounded,
                                                   size: DossierButtonSize.sm,
                                                   variant: DossierButtonVariant.outline,
-                                                  onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'AADHAAR_FRONT'),
+                                                  onPressed: () => _openAttachDialog(context, activeCase.id, 'Aadhaar Front'),
                                                 ),
                                                 DossierButton(
-                                                  text: '+ Photo',
+                                                  text: '+ Aadhaar Back',
+                                                  icon: Icons.badge_outlined,
+                                                  size: DossierButtonSize.sm,
+                                                  variant: DossierButtonVariant.outline,
+                                                  onPressed: () => _openAttachDialog(context, activeCase.id, 'Aadhaar Back'),
+                                                ),
+                                                DossierButton(
+                                                  text: '+ Passport Photo',
                                                   icon: Icons.photo_camera_front_rounded,
                                                   size: DossierButtonSize.sm,
                                                   variant: DossierButtonVariant.outline,
-                                                  onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'PASSPORT_PHOTO'),
+                                                  onPressed: () => _openAttachDialog(context, activeCase.id, 'Passport Photo'),
                                                 ),
                                                 DossierButton(
                                                   text: '+ Signature',
                                                   icon: Icons.draw_rounded,
                                                   size: DossierButtonSize.sm,
                                                   variant: DossierButtonVariant.outline,
-                                                  onPressed: () => _addSimulatedExhibit(ref, activeCase.id, 'SIGNATURE'),
+                                                  onPressed: () => _openAttachDialog(context, activeCase.id, 'Signature'),
+                                                ),
+                                                DossierButton(
+                                                  text: '+ Browse Any File',
+                                                  icon: Icons.upload_file_rounded,
+                                                  size: DossierButtonSize.sm,
+                                                  variant: DossierButtonVariant.secondary,
+                                                  onPressed: () => _openAttachDialog(context, activeCase.id),
                                                 ),
                                               ],
                                             ),
@@ -386,38 +397,73 @@ class CaseIntakePane extends ConsumerWidget {
                                       separatorBuilder: (context, _) => const SizedBox(height: 8),
                                       itemBuilder: (context, index) {
                                         final ex = exhibits[index];
-                                        return DossierCard(
-                                          variant: DossierCardVariant.flat,
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          borderRadius: 10,
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.all(6),
-                                                decoration: BoxDecoration(
-                                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                ),
-                                                child: Icon(Icons.image_rounded, color: Theme.of(context).colorScheme.primary, size: 18),
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(ex.fileName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                                    Text(
-                                                      '${ex.slotType} • ${(ex.fileSizeBytes / 1024).toStringAsFixed(0)} KB',
-                                                      style: TextStyle(color: Colors.grey[500], fontSize: 10.5),
+                                        final isImage = ex.mimeType.startsWith('image/');
+                                        final isPdf = ex.mimeType.contains('pdf') || ex.fileName.toLowerCase().endsWith('.pdf');
+                                        final hasLocal = ex.localPath != null && ex.localPath!.isNotEmpty && File(ex.localPath!).existsSync();
+
+                                        return InkWell(
+                                          onTap: () => _openExhibitPreview(context, ex),
+                                          borderRadius: BorderRadius.circular(10),
+                                          child: DossierCard(
+                                            variant: DossierCardVariant.flat,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                            borderRadius: 10,
+                                            child: Row(
+                                              children: [
+                                                if (isImage && hasLocal)
+                                                  ClipRRect(
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    child: Image.file(
+                                                      File(ex.localPath!),
+                                                      width: 38,
+                                                      height: 38,
+                                                      fit: BoxFit.cover,
                                                     ),
-                                                  ],
+                                                  )
+                                                else
+                                                  Container(
+                                                    padding: const EdgeInsets.all(8),
+                                                    decoration: BoxDecoration(
+                                                      color: (isPdf ? Colors.redAccent : const Color(0xFF6366F1)).withValues(alpha: 0.15),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: Icon(
+                                                      isPdf ? Icons.picture_as_pdf_rounded : Icons.insert_drive_file_rounded,
+                                                      color: isPdf ? Colors.redAccent : const Color(0xFF6366F1),
+                                                      size: 20,
+                                                    ),
+                                                  ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        ex.fileName,
+                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        '${ex.slotType} • ${(ex.fileSizeBytes / 1024).toStringAsFixed(1)} KB',
+                                                        style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
-                                              ),
-                                              const DossierBadge(
-                                                label: 'READY',
-                                                variant: DossierBadgeVariant.success,
-                                              ),
-                                            ],
+                                                DossierBadge(
+                                                  label: ex.slotType,
+                                                  variant: DossierBadgeVariant.primary,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                IconButton(
+                                                  icon: const Icon(Icons.remove_red_eye_outlined, size: 18),
+                                                  tooltip: 'Preview Document',
+                                                  onPressed: () => _openExhibitPreview(context, ex),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         );
                                       },

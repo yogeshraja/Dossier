@@ -25,8 +25,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   SignInMethod _signInMethod = SignInMethod.password;
 
   // Sign-In Form Controllers
-  final _signInIdentifierCtrl = TextEditingController(text: '9876543210');
-  final _signInPasswordCtrl = TextEditingController(text: 'admin123');
+  final _signInIdentifierCtrl = TextEditingController();
+  final _signInPasswordCtrl = TextEditingController();
   bool _obscureSignInPassword = true;
 
   // PIN Unlock State
@@ -34,14 +34,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   String? _selectedOperatorId;
 
   // Sign-Up Form Controllers
-  final _signUpKioskNameCtrl = TextEditingController(text: 'Sri Balaji Digital Seva & CSC');
-  final _signUpOperatorNameCtrl = TextEditingController(text: 'Vikram Singh');
-  final _signUpPhoneCtrl = TextEditingController(text: '9845012345');
-  final _signUpEmailCtrl = TextEditingController(text: 'vikram.csc@gmail.com');
-  final _signUpPasswordCtrl = TextEditingController(text: 'kiosk2026');
-  final _signUpPinCtrl = TextEditingController(text: '4321');
-  final _signUpUpiCtrl = TextEditingController(text: 'vikramkiosk@okaxis');
-  final _signUpAddressCtrl = TextEditingController(text: 'Bus Stand Complex, Main Road');
+  final _signUpKioskNameCtrl = TextEditingController();
+  final _signUpOperatorNameCtrl = TextEditingController();
+  final _signUpPhoneCtrl = TextEditingController();
+  final _signUpEmailCtrl = TextEditingController();
+  final _signUpPasswordCtrl = TextEditingController();
+  final _signUpPinCtrl = TextEditingController();
+  final _signUpUpiCtrl = TextEditingController();
+  final _signUpAddressCtrl = TextEditingController();
   OperatorRole _signUpRole = OperatorRole.admin;
   bool _obscureSignUpPassword = true;
 
@@ -50,12 +50,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    // Default select the first operator for PIN login
+    // Default to sign-up if no operator exists yet, or select the first operator for PIN
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final operators = ref.read(authProvider).registeredOperators;
-      if (operators.isNotEmpty) {
+      final auth = ref.read(authProvider);
+      if (auth.registeredOperators.isEmpty) {
         setState(() {
-          _selectedOperatorId = operators.first.id;
+          _authMode = AuthMode.signUp;
+        });
+      } else {
+        setState(() {
+          _selectedOperatorId = auth.registeredOperators.first.id;
         });
       }
     });
@@ -147,13 +151,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
           backgroundColor: Color(0xFF10B981),
         ),
       );
-      _onSuccessfulAuth();
-    }
-  }
-
-  Future<void> _handleDemoLogin() async {
-    await ref.read(authProvider.notifier).quickDemoLogin();
-    if (mounted) {
       _onSuccessfulAuth();
     }
   }
@@ -744,54 +741,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
           // Quick PIN Unlock Mode
           _buildPinKeypadView(isDark, authState),
         ],
-
-        const SizedBox(height: 16),
-
-        // Quick Demo Login Action
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-            ),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.bolt_rounded, color: Color(0xFFF59E0B), size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Instant Test / Demo Access',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : const Color(0xFF0F172A),
-                      ),
-                    ),
-                    Text(
-                      'Bypass login with default Admin operator',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              DossierButton(
-                text: '1-Tap Demo',
-                size: DossierButtonSize.sm,
-                variant: DossierButtonVariant.outline,
-                onPressed: _handleDemoLogin,
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -1122,7 +1071,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
           const SizedBox(height: 14),
 
           // Role Selector
-          Row(
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               Text(
                 'Role: ',
@@ -1132,21 +1084,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
                   color: isDark ? Colors.white : const Color(0xFF0F172A),
                 ),
               ),
-              const SizedBox(width: 8),
-              Wrap(
-                spacing: 8,
-                children: OperatorRole.values.map((role) {
-                  final isSelected = _signUpRole == role;
-                  return ChoiceChip(
-                    avatar: Icon(role.icon, size: 14, color: isSelected ? Colors.white : role.color),
-                    label: Text(role.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    selected: isSelected,
-                    onSelected: (val) {
-                      if (val) setState(() => _signUpRole = role);
-                    },
-                  );
-                }).toList(),
-              ),
+              ...OperatorRole.values.map((role) {
+                final isSelected = _signUpRole == role;
+                return ChoiceChip(
+                  avatar: Icon(role.icon, size: 14, color: isSelected ? Colors.white : role.color),
+                  label: Text(role.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  selected: isSelected,
+                  onSelected: (val) {
+                    if (val) setState(() => _signUpRole = role);
+                  },
+                );
+              }),
             ],
           ),
 

@@ -99,6 +99,12 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<int> insertExhibit(ExhibitsCompanion entry) => into(exhibits).insert(entry);
+  Future<int> deleteExhibit(String exhibitId) =>
+      (delete(exhibits)..where((tbl) => tbl.id.equals(exhibitId))).go();
+  Future<int> deleteCase(String caseId) =>
+      (delete(cases)..where((tbl) => tbl.id.equals(caseId))).go();
+  Future<int> deleteDossier(String dossierId) =>
+      (delete(dossiers)..where((tbl) => tbl.id.equals(dossierId))).go();
 
   // 5. Invoicing & Ledger
   Stream<List<Invoice>> watchRecentInvoices({int limit = 50}) {

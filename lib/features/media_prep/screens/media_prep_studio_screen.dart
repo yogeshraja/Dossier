@@ -1,6 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
+import 'package:file_picker/file_picker.dart';
 import 'package:dossier/domain/services/media_prep_service.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
@@ -17,16 +18,25 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
   late TabController _tabController;
 
   // Stitcher State
+  PlatformFile? _frontCardFile;
+  Uint8List? _frontCardBytes;
+  PlatformFile? _backCardFile;
+  Uint8List? _backCardBytes;
   Uint8List? _stitchedResult;
   bool _isStitching = false;
 
   // Compressor State
+  PlatformFile? _compressSourceFile;
+  Uint8List? _compressSourceBytes;
   Uint8List? _compressedResult;
   int _originalSize = 0;
   int _compressedSize = 0;
+  int _targetKb = 100;
   bool _isCompressing = false;
 
   // Passport Studio State
+  PlatformFile? _portraitSourceFile;
+  Uint8List? _portraitSourceBytes;
   Uint8List? _passportGridResult;
   int _photoCount = 6;
   bool _isGeneratingGrid = false;
@@ -43,56 +53,131 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
     super.dispose();
   }
 
-  Uint8List _generateSampleCardImage(String title, Color bgColor) {
-    final canvas = img.Image(width: 800, height: 500);
-    final r = (bgColor.r * 255.0).round().clamp(0, 255);
-    final g = (bgColor.g * 255.0).round().clamp(0, 255);
-    final b = (bgColor.b * 255.0).round().clamp(0, 255);
-    img.fill(canvas, color: img.ColorRgba8(r, g, b, 255));
-    img.drawRect(canvas, x1: 20, y1: 20, x2: 780, y2: 480, color: img.ColorRgba8(255, 255, 255, 255));
-    img.drawString(canvas, title, font: img.arial24, x: 50, y: 50, color: img.ColorRgba8(255, 255, 255, 255));
-    return Uint8List.fromList(img.encodeJpg(canvas, quality: 90));
+  // --- Real File Pickers ---
+
+  Future<void> _pickFrontCard() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+        if (bytes != null) {
+          setState(() {
+            _frontCardFile = file;
+            _frontCardBytes = bytes;
+            _stitchedResult = null;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting front card: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
   }
 
-  Uint8List _generateSamplePortrait() {
-    final canvas = img.Image(width: 600, height: 800);
-    img.fill(canvas, color: img.ColorRgba8(59, 130, 246, 255));
-    img.fillCircle(canvas, x: 300, y: 350, radius: 180, color: img.ColorRgba8(245, 158, 11, 255));
-    img.fillRect(canvas, x1: 100, y1: 550, x2: 500, y2: 800, color: img.ColorRgba8(30, 41, 59, 255));
-    return Uint8List.fromList(img.encodeJpg(canvas, quality: 95));
+  Future<void> _pickBackCard() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+        if (bytes != null) {
+          setState(() {
+            _backCardFile = file;
+            _backCardBytes = bytes;
+            _stitchedResult = null;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting back card: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
   }
 
-  Future<void> _runStitcherDemo() async {
+  Future<void> _runStitcher() async {
+    if (_frontCardBytes == null || _backCardBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select both Front and Back card images.')),
+      );
+      return;
+    }
+
     setState(() => _isStitching = true);
     try {
-      final front = _generateSampleCardImage('GOVT ID CARD - FRONT\nName: Ramesh Kumar\nDOB: 12/04/1988', Colors.indigo);
-      final back = _generateSampleCardImage('GOVT ID CARD - BACK\nAddress: Sector 4, Main Market\nPIN: 110001', Colors.teal);
-
       final result = await MediaPrepService.stitchIdFrontAndBack(
-        frontImageBytes: front,
-        backImageBytes: back,
+        frontImageBytes: _frontCardBytes!,
+        backImageBytes: _backCardBytes!,
         outputA4: true,
       );
 
       setState(() => _stitchedResult = result);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error stitching ID cards: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
     } finally {
-      setState(() => _isStitching = false);
+      if (mounted) setState(() => _isStitching = false);
     }
   }
 
-  Future<void> _runCompressorDemo(int targetKb) async {
-    setState(() => _isCompressing = true);
+  Future<void> _pickCompressSource() async {
     try {
-      final largeImg = img.Image(width: 2000, height: 2000);
-      img.fill(largeImg, color: img.ColorRgba8(20, 80, 160, 255));
-      for (int i = 0; i < 200; i++) {
-        img.drawCircle(largeImg, x: (i * 37) % 2000, y: (i * 53) % 2000, radius: 40, color: img.ColorRgba8(255, 200, 50, 255));
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+        if (bytes != null) {
+          setState(() {
+            _compressSourceFile = file;
+            _compressSourceBytes = bytes;
+            _originalSize = bytes.lengthInBytes;
+            _compressedResult = null;
+          });
+        }
       }
-      final rawBytes = Uint8List.fromList(img.encodeJpg(largeImg, quality: 100));
-      _originalSize = rawBytes.lengthInBytes;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting image: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
 
+  Future<void> _runCompressor(int targetKb) async {
+    if (_compressSourceBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please pick an image to compress first.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isCompressing = true;
+      _targetKb = targetKb;
+    });
+
+    try {
       final result = await MediaPrepService.compressToTargetSize(
-        inputBytes: rawBytes,
+        inputBytes: _compressSourceBytes!,
         targetSizeBytes: targetKb * 1024,
       );
 
@@ -100,22 +185,95 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
         _compressedResult = result;
         _compressedSize = result.lengthInBytes;
       });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error compressing image: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
     } finally {
-      setState(() => _isCompressing = false);
+      if (mounted) setState(() => _isCompressing = false);
     }
   }
 
-  Future<void> _runPassportGridDemo() async {
+  Future<void> _pickPortraitSource() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+        if (bytes != null) {
+          setState(() {
+            _portraitSourceFile = file;
+            _portraitSourceBytes = bytes;
+            _passportGridResult = null;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting portrait photo: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  Future<void> _runPassportGrid() async {
+    if (_portraitSourceBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a customer portrait photo first.')),
+      );
+      return;
+    }
+
     setState(() => _isGeneratingGrid = true);
     try {
-      final portrait = _generateSamplePortrait();
       final result = await MediaPrepService.generatePassportPhotoGrid(
-        portraitBytes: portrait,
+        portraitBytes: _portraitSourceBytes!,
         photoCount: _photoCount,
       );
       setState(() => _passportGridResult = result);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error generating passport grid: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
     } finally {
-      setState(() => _isGeneratingGrid = false);
+      if (mounted) setState(() => _isGeneratingGrid = false);
+    }
+  }
+
+  Future<void> _saveOutputBytes(Uint8List bytes, String defaultName) async {
+    try {
+      final savePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Processed Document Image',
+        fileName: defaultName,
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'png'],
+      );
+
+      if (savePath != null) {
+        await File(savePath).writeAsBytes(bytes);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('File saved successfully to: $savePath'),
+              backgroundColor: const Color(0xFF10B981),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving file: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
@@ -162,7 +320,7 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
                                   ),
                                 ),
                                 SizedBox(width: 8),
-                                DossierBadge(text: 'PURE DART', variant: DossierBadgeVariant.info),
+                                DossierBadge(label: 'PURE DART', variant: DossierBadgeVariant.info),
                               ],
                             ),
                           ),
@@ -204,7 +362,7 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
                           children: [
                             Text('Media Prep Studio', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
                             SizedBox(width: 8),
-                            DossierBadge(text: 'ISOLATE ENGINE', variant: DossierBadgeVariant.info),
+                            DossierBadge(label: 'ISOLATE ENGINE', variant: DossierBadgeVariant.info),
                           ],
                         ),
                         SizedBox(height: 2),
@@ -237,9 +395,24 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildResponsiveView(_buildIdStitcherControls(), _stitchedResult, 'Stitched A4 Page Output'),
-                _buildResponsiveView(_buildCompressorControls(), _compressedResult, 'DCT Quantized Output'),
-                _buildResponsiveView(_buildPassportStudioControls(), _passportGridResult, '4x6 Tiled Passport Sheet Output'),
+                _buildResponsiveView(
+                  _buildIdStitcherControls(),
+                  _stitchedResult,
+                  'Stitched A4 Page Output',
+                  () => _stitchedResult != null ? _saveOutputBytes(_stitchedResult!, 'stitched_id_a4.jpg') : null,
+                ),
+                _buildResponsiveView(
+                  _buildCompressorControls(),
+                  _compressedResult,
+                  'DCT Quantized Output',
+                  () => _compressedResult != null ? _saveOutputBytes(_compressedResult!, 'compressed_${_targetKb}kb.jpg') : null,
+                ),
+                _buildResponsiveView(
+                  _buildPassportStudioControls(),
+                  _passportGridResult,
+                  '4x6 Tiled Passport Sheet Output',
+                  () => _passportGridResult != null ? _saveOutputBytes(_passportGridResult!, 'passport_grid_${_photoCount}p.jpg') : null,
+                ),
               ],
             ),
           ),
@@ -248,7 +421,7 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
     );
   }
 
-  Widget _buildResponsiveView(Widget controls, Uint8List? resultBytes, String title) {
+  Widget _buildResponsiveView(Widget controls, Uint8List? resultBytes, String title, VoidCallback? onSave) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 800;
@@ -264,22 +437,37 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
                 DossierCard(
                   variant: DossierCardVariant.glass,
                   padding: const EdgeInsets.all(12),
-                  child: SizedBox(
-                    height: 380,
-                    child: Center(
-                      child: resultBytes != null
-                          ? Image.memory(resultBytes, fit: BoxFit.contain)
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.crop_original_rounded, size: 48, color: Colors.grey[500]),
-                                const SizedBox(height: 8),
-                                Text('No $title yet', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                const SizedBox(height: 4),
-                                const Text('Run the action above to render preview', style: TextStyle(color: Colors.grey, fontSize: 11.5)),
-                              ],
-                            ),
-                    ),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        height: 340,
+                        child: Center(
+                          child: resultBytes != null
+                              ? Image.memory(resultBytes, fit: BoxFit.contain)
+                              : Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.crop_original_rounded, size: 48, color: Colors.grey[500]),
+                                    const SizedBox(height: 8),
+                                    Text('No $title yet', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    const SizedBox(height: 4),
+                                    const Text('Select source images and click Process', style: TextStyle(color: Colors.grey, fontSize: 11.5)),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      if (resultBytes != null && onSave != null) ...[
+                        const SizedBox(height: 10),
+                        DossierButton(
+                          text: 'Save / Export Output',
+                          icon: Icons.save_alt_rounded,
+                          variant: DossierButtonVariant.success,
+                          size: DossierButtonSize.md,
+                          isFullWidth: true,
+                          onPressed: onSave,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -293,7 +481,7 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: 340,
+                width: 360,
                 child: SingleChildScrollView(
                   child: controls,
                 ),
@@ -303,20 +491,45 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
                 child: DossierCard(
                   variant: DossierCardVariant.glass,
                   padding: const EdgeInsets.all(16),
-                  child: Center(
-                    child: resultBytes != null
-                        ? Image.memory(resultBytes, fit: BoxFit.contain)
-                        : Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.crop_original_rounded, size: 56, color: Colors.grey[500]),
-                              const SizedBox(height: 12),
-                              Text('No $title yet', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              const SizedBox(height: 4),
-                              const Text('Click the action button on the left to run background isolate computation',
-                                  style: TextStyle(color: Colors.grey, fontSize: 12)),
-                            ],
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: resultBytes != null
+                              ? InteractiveViewer(
+                                  panEnabled: true,
+                                  boundaryMargin: const EdgeInsets.all(20),
+                                  minScale: 0.8,
+                                  maxScale: 3.0,
+                                  child: Image.memory(resultBytes, fit: BoxFit.contain),
+                                )
+                              : Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.crop_original_rounded, size: 56, color: Colors.grey[500]),
+                                    const SizedBox(height: 12),
+                                    Text('No $title yet', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    const Text('Pick real files on the left and run background isolate computation',
+                                        style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                  ],
+                                ),
+                        ),
+                      ),
+                      if (resultBytes != null && onSave != null) ...[
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: DossierButton(
+                            text: 'Save / Export Output',
+                            icon: Icons.save_alt_rounded,
+                            variant: DossierButtonVariant.success,
+                            size: DossierButtonSize.md,
+                            onPressed: onSave,
                           ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
@@ -337,15 +550,88 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
           'Merges front and back captures onto a standard A4 sheet with folding and cutting markers for rapid kiosk printing.',
           style: TextStyle(color: Colors.grey[500], fontSize: 12),
         ),
+        const SizedBox(height: 16),
+
+        // Front Card Selector
+        DossierCard(
+          variant: DossierCardVariant.flat,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('1. ID Front Side', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  if (_frontCardFile != null)
+                    const DossierBadge(label: 'SELECTED', variant: DossierBadgeVariant.success),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_frontCardBytes != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(_frontCardBytes!, height: 80, width: double.infinity, fit: BoxFit.cover),
+                ),
+              const SizedBox(height: 8),
+              DossierButton(
+                text: _frontCardFile != null ? 'Change Front Image' : 'Pick Front ID Image',
+                icon: Icons.image_search_rounded,
+                variant: DossierButtonVariant.outline,
+                size: DossierButtonSize.sm,
+                isFullWidth: true,
+                onPressed: _pickFrontCard,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Back Card Selector
+        DossierCard(
+          variant: DossierCardVariant.flat,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('2. ID Back Side', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  if (_backCardFile != null)
+                    const DossierBadge(label: 'SELECTED', variant: DossierBadgeVariant.success),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_backCardBytes != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(_backCardBytes!, height: 80, width: double.infinity, fit: BoxFit.cover),
+                ),
+              const SizedBox(height: 8),
+              DossierButton(
+                text: _backCardFile != null ? 'Change Back Image' : 'Pick Back ID Image',
+                icon: Icons.image_search_rounded,
+                variant: DossierButtonVariant.outline,
+                size: DossierButtonSize.sm,
+                isFullWidth: true,
+                onPressed: _pickBackCard,
+              ),
+            ],
+          ),
+        ),
+
         const SizedBox(height: 18),
+
         DossierButton(
-          text: 'Stitch Front + Back ID',
+          text: 'Stitch Front + Back to A4',
           icon: Icons.auto_fix_high_rounded,
           isLoading: _isStitching,
           variant: DossierButtonVariant.primary,
           size: DossierButtonSize.lg,
           isFullWidth: true,
-          onPressed: _isStitching ? null : _runStitcherDemo,
+          onPressed: (_frontCardBytes != null && _backCardBytes != null && !_isStitching) ? _runStitcher : null,
         ),
       ],
     );
@@ -362,25 +648,95 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
           style: TextStyle(color: Colors.grey[500], fontSize: 12),
         ),
         const SizedBox(height: 16),
+
+        // Pick Image Area
+        DossierCard(
+          variant: DossierCardVariant.flat,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Source Document / Image', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  if (_compressSourceFile != null)
+                    DossierBadge(
+                      label: '${(_originalSize / 1024).toStringAsFixed(0)} KB',
+                      variant: DossierBadgeVariant.primary,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_compressSourceBytes != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(_compressSourceBytes!, height: 90, width: double.infinity, fit: BoxFit.cover),
+                ),
+              const SizedBox(height: 8),
+              DossierButton(
+                text: _compressSourceFile != null ? 'Change Image (${_compressSourceFile!.name})' : 'Pick Image to Compress',
+                icon: Icons.upload_file_rounded,
+                variant: DossierButtonVariant.outline,
+                size: DossierButtonSize.sm,
+                isFullWidth: true,
+                onPressed: _pickCompressSource,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+        const Text('Target Output Size Bound:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+        const SizedBox(height: 8),
+
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('< 50 KB (Photo/Sign)'),
+              selected: _targetKb == 50,
+              onSelected: (val) {
+                if (val && _compressSourceBytes != null) _runCompressor(50);
+              },
+            ),
+            ChoiceChip(
+              label: const Text('< 100 KB'),
+              selected: _targetKb == 100,
+              onSelected: (val) {
+                if (val && _compressSourceBytes != null) _runCompressor(100);
+              },
+            ),
+            ChoiceChip(
+              label: const Text('< 200 KB (Govt Portals)'),
+              selected: _targetKb == 200,
+              onSelected: (val) {
+                if (val && _compressSourceBytes != null) _runCompressor(200);
+              },
+            ),
+            ChoiceChip(
+              label: const Text('< 500 KB'),
+              selected: _targetKb == 500,
+              onSelected: (val) {
+                if (val && _compressSourceBytes != null) _runCompressor(500);
+              },
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
         DossierButton(
-          text: 'Compress to < 200 KB',
+          text: 'Compress to < $_targetKb KB',
           icon: Icons.compress_rounded,
           isLoading: _isCompressing,
-          variant: DossierButtonVariant.success,
+          variant: DossierButtonVariant.primary,
           size: DossierButtonSize.md,
           isFullWidth: true,
-          onPressed: _isCompressing ? null : () => _runCompressorDemo(200),
+          onPressed: (_compressSourceBytes != null && !_isCompressing) ? () => _runCompressor(_targetKb) : null,
         ),
-        const SizedBox(height: 10),
-        DossierButton(
-          text: 'Compress to < 50 KB (Photo/Sign)',
-          icon: Icons.compress_rounded,
-          isLoading: _isCompressing,
-          variant: DossierButtonVariant.warning,
-          size: DossierButtonSize.md,
-          isFullWidth: true,
-          onPressed: _isCompressing ? null : () => _runCompressorDemo(50),
-        ),
+
         if (_compressedResult != null) ...[
           const SizedBox(height: 16),
           DossierCard(
@@ -415,10 +771,47 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
           style: TextStyle(color: Colors.grey[500], fontSize: 12),
         ),
         const SizedBox(height: 16),
+
+        // Pick Portrait Area
+        DossierCard(
+          variant: DossierCardVariant.flat,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Customer Portrait Photo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  if (_portraitSourceFile != null)
+                    const DossierBadge(label: 'READY', variant: DossierBadgeVariant.success),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_portraitSourceBytes != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(_portraitSourceBytes!, height: 90, width: double.infinity, fit: BoxFit.cover),
+                ),
+              const SizedBox(height: 8),
+              DossierButton(
+                text: _portraitSourceFile != null ? 'Change Portrait (${_portraitSourceFile!.name})' : 'Pick Customer Portrait Photo',
+                icon: Icons.person_search_rounded,
+                variant: DossierButtonVariant.outline,
+                size: DossierButtonSize.sm,
+                isFullWidth: true,
+                onPressed: _pickPortraitSource,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
         SegmentedButton<int>(
           segments: const [
             ButtonSegment(value: 6, label: Text('6 Photos (2x3)')),
             ButtonSegment(value: 8, label: Text('8 Photos (2x4)')),
+            ButtonSegment(value: 12, label: Text('12 Photos (3x4)')),
           ],
           selected: {_photoCount},
           onSelectionChanged: (val) => setState(() => _photoCount = val.first),
@@ -431,7 +824,7 @@ class _MediaPrepStudioScreenState extends State<MediaPrepStudioScreen> with Sing
           variant: DossierButtonVariant.primary,
           size: DossierButtonSize.lg,
           isFullWidth: true,
-          onPressed: _isGeneratingGrid ? null : _runPassportGridDemo,
+          onPressed: (_portraitSourceBytes != null && !_isGeneratingGrid) ? _runPassportGrid : null,
         ),
       ],
     );
