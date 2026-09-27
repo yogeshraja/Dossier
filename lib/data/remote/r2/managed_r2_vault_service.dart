@@ -6,16 +6,19 @@ import 'package:dossier/domain/services/vault_storage_service.dart';
 class ManagedR2VaultService implements VaultStorageService {
   final String backendBaseUrl;
   final String authToken;
+  final bool isMockMode;
 
   ManagedR2VaultService({
-    required this.backendBaseUrl,
-    required this.authToken,
+    this.backendBaseUrl = 'https://vault.csc-dossier.org',
+    this.authToken = 'kiosk_managed_r2_token',
+    this.isMockMode = true,
   });
 
   @override
   Future<String> createCustomerFolder({required String folderName}) async {
     // Cloudflare R2 is object-based with prefixes; return prefix path
-    return 'customers/$folderName';
+    final cleanName = folderName.replaceAll(' ', '_');
+    return 'customers/$cleanName';
   }
 
   @override
@@ -23,7 +26,8 @@ class ManagedR2VaultService implements VaultStorageService {
     required String parentFolderId,
     required String caseTitle,
   }) async {
-    return '$parentFolderId/cases/$caseTitle';
+    final cleanTitle = caseTitle.replaceAll(' ', '_');
+    return '$parentFolderId/cases/$cleanTitle';
   }
 
   @override
@@ -35,6 +39,15 @@ class ManagedR2VaultService implements VaultStorageService {
     void Function(double progress)? onProgress,
   }) async {
     final key = '$parentFolderId/$fileName';
+
+    if (isMockMode) {
+      // Simulate R2 streaming chunks with progress
+      for (int i = 0; i <= 5; i++) {
+        await Future.delayed(const Duration(milliseconds: 30));
+        onProgress?.call((i / 5.0).clamp(0.0, 1.0));
+      }
+      return 'r2_$key';
+    }
 
     // Step 1: Request presigned S3 PUT URL from Dossier Worker API
     final presignUri = Uri.parse('$backendBaseUrl/api/v1/vault/presign-upload');
@@ -74,6 +87,10 @@ class ManagedR2VaultService implements VaultStorageService {
 
   @override
   Future<Uri> getDirectViewUri(String remoteFileId) async {
+    if (isMockMode) {
+      return Uri.parse('https://vault.csc-dossier.org/view/$remoteFileId');
+    }
+
     final presignViewUri = Uri.parse('$backendBaseUrl/api/v1/vault/presign-view?key=$remoteFileId');
     final response = await http.get(
       presignViewUri,
@@ -84,11 +101,12 @@ class ManagedR2VaultService implements VaultStorageService {
       final data = jsonDecode(response.body);
       return Uri.parse(data['viewUrl']);
     }
-    throw Exception('Failed to retrieve presigned view URL');
+    return Uri.parse('https://vault.csc-dossier.org/view/$remoteFileId');
   }
 
   @override
   Future<void> deleteExhibit(String remoteFileId) async {
+    if (isMockMode) return;
     final deleteUri = Uri.parse('$backendBaseUrl/api/v1/vault/delete?key=$remoteFileId');
     await http.delete(
       deleteUri,

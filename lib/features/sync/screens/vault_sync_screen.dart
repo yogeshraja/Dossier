@@ -344,7 +344,7 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
                             ),
                             const SizedBox(width: 8),
                             DossierBadge(
-                              label: _isProTier ? '₹249/mo' : 'ACTIVE',
+                              label: _isProTier ? 'R2 ACTIVE' : 'DRIVE ACTIVE',
                               variant: _isProTier ? DossierBadgeVariant.success : DossierBadgeVariant.info,
                             ),
                           ],
@@ -352,7 +352,7 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
                         const SizedBox(height: 2),
                         Text(
                           _isProTier
-                              ? 'Instant zero-setup cloud backup, multi-device real-time sync across 2-4 counter PCs, \$0 egress fees.'
+                              ? 'Instant zero-setup cloud backup via Cloudflare R2, multi-device counter PC sync, \$0 egress fees.'
                               : 'Artifacts uploaded directly to personal Google Drive account (/Dossier_Workspace) via official Drive API v3.',
                           style: TextStyle(color: Colors.grey[500], fontSize: 11.5),
                         ),
@@ -362,9 +362,106 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
                   const SizedBox(width: 8),
                   Switch(
                     value: _isProTier,
-                    onChanged: (val) => setState(() => _isProTier = val),
+                    onChanged: (val) {
+                      setState(() => _isProTier = val);
+                      ref.read(syncProvider.notifier).setStorageTier(
+                            val ? StorageTierType.managedR2 : StorageTierType.byoGoogleDrive,
+                          );
+                    },
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // Air-Gapped Disaster Recovery & Database Backup
+            DossierCard(
+              variant: DossierCardVariant.outlined,
+              padding: const EdgeInsets.all(16),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 320),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.security_rounded, color: Color(0xFFF59E0B), size: 24),
+                            ),
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'Air-Gapped Backup & Restore',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Export full SQLite snapshot to USB or restore disaster recovery bundle (.dossier)',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          DossierButton(
+                            text: 'Export Backup (.dossier)',
+                            icon: Icons.download_rounded,
+                            size: DossierButtonSize.sm,
+                            variant: DossierButtonVariant.outline,
+                            tooltip: 'Export complete database snapshot to encrypted .dossier JSON bundle',
+                            onPressed: () async {
+                              final backupService = ref.read(backupRestoreServiceProvider);
+                              final bundle = await backupService.createBackup();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: const Color(0xFF10B981),
+                                    content: Text('Database backup created successfully! (${bundle.totalDossiers} dossiers, ${bundle.totalCases} cases, ${bundle.totalInvoices} invoices)'),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                          DossierButton(
+                            text: 'Restore Backup',
+                            icon: Icons.restore_rounded,
+                            size: DossierButtonSize.sm,
+                            variant: DossierButtonVariant.secondary,
+                            tooltip: 'Restore customer dossiers and cases from an existing .dossier bundle',
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Select .dossier backup bundle from storage to restore.')),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 20),

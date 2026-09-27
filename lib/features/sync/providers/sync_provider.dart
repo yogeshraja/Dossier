@@ -2,13 +2,35 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/data/remote/gdrive/google_drive_vault_service.dart';
+import 'package:dossier/data/remote/r2/managed_r2_vault_service.dart';
+import 'package:dossier/domain/services/vault_storage_service.dart';
+import 'package:dossier/domain/services/backup_restore_service.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
+
+enum StorageTierType {
+  byoGoogleDrive('BYO Google Drive (Free / User Quota)'),
+  managedR2('Managed Cloudflare R2 Cloud Vault'),
+  airGappedLocal('Local Air-Gapped Kiosk (Offline)');
+
+  final String label;
+  const StorageTierType(this.label);
+}
 
 final googleDriveServiceProvider = Provider<GoogleDriveVaultService>((ref) {
   return GoogleDriveVaultService();
 });
 
+final managedR2ServiceProvider = Provider<ManagedR2VaultService>((ref) {
+  return ManagedR2VaultService();
+});
+
+final backupRestoreServiceProvider = Provider<BackupRestoreService>((ref) {
+  final db = ref.watch(databaseProvider);
+  return BackupRestoreService(db);
+});
+
 class SyncState {
+  final StorageTierType activeTier;
   final bool isConnected;
   final bool isSyncing;
   final bool isMockMode;
@@ -22,6 +44,7 @@ class SyncState {
   final List<String> logs;
 
   const SyncState({
+    this.activeTier = StorageTierType.byoGoogleDrive,
     this.isConnected = false,
     this.isSyncing = false,
     this.isMockMode = false,
@@ -36,6 +59,7 @@ class SyncState {
   });
 
   SyncState copyWith({
+    StorageTierType? activeTier,
     bool? isConnected,
     bool? isSyncing,
     bool? isMockMode,
@@ -49,6 +73,7 @@ class SyncState {
     List<String>? logs,
   }) {
     return SyncState(
+      activeTier: activeTier ?? this.activeTier,
       isConnected: isConnected ?? this.isConnected,
       isSyncing: isSyncing ?? this.isSyncing,
       isMockMode: isMockMode ?? this.isMockMode,
@@ -67,8 +92,19 @@ class SyncState {
 class SyncNotifier extends StateNotifier<SyncState> {
   final Ref _ref;
   final GoogleDriveVaultService _gdrive;
+  final ManagedR2VaultService _r2;
 
-  SyncNotifier(this._ref, this._gdrive) : super(const SyncState());
+  SyncNotifier(this._ref, this._gdrive, this._r2) : super(const SyncState());
+
+  void setStorageTier(StorageTierType tier) {
+    state = state.copyWith(
+      activeTier: tier,
+      logs: [
+        '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} - Active storage engine set to ${tier.label}',
+        ...state.logs,
+      ],
+    );
+  }
 
   Future<bool> connectGoogleDrive({bool forceMock = false}) async {
     state = state.copyWith(currentTask: 'Connecting to Google Drive...');
@@ -108,10 +144,27 @@ class SyncNotifier extends StateNotifier<SyncState> {
     );
   }
 
+  VaultStorageService _getActiveStorageService() {
+    if (state.activeTier == StorageTierType.managedR2) {
+      return _r2;
+    }
+    return _gdrive;
+  }
+
   Future<void> triggerSync() async {
     if (state.isSyncing) return;
 
-    if (!state.isConnected) {
+    if (state.activeTier == StorageTierType.airGappedLocal) {
+      state = state.copyWith(
+        logs: [
+          '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} - Sync skipped (Air-Gapped Local Mode active)',
+          ...state.logs,
+        ],
+      );
+      return;
+    }
+
+    if (state.activeTier == StorageTierType.byoGoogleDrive && !state.isConnected) {
       final connected = await connectGoogleDrive(forceMock: true);
       if (!connected) return;
     }
@@ -120,6 +173,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
     final db = _ref.read(databaseProvider);
     final pendingItems = await db.getPendingSyncItems();
+    final vaultService = _getActiveStorageService();
 
     if (pendingItems.isEmpty) {
       state = state.copyWith(
@@ -154,35 +208,35 @@ class SyncNotifier extends StateNotifier<SyncState> {
           final dossier = await db.getDossierById(item.entityId);
           if (dossier != null && item.operation != 'DELETE') {
             final folderName = '${dossier.fullName}_${dossier.phoneNumber}';
-            final remoteFolderId = await _gdrive.createCustomerFolder(folderName: folderName);
+            final remoteFolderId = await vaultService.createCustomerFolder(folderName: folderName);
             await db.updateDossierRemoteFolderId(dossier.id, remoteFolderId);
-            newLogs.add('Customer folder created in Google Drive: $folderName');
+            newLogs.add('Customer folder created in Cloud: $folderName');
           }
         } else if (item.entityType == 'CASE') {
           final caseItem = await db.getCaseById(item.entityId);
           if (caseItem != null && item.operation != 'DELETE') {
             final dossier = await db.getDossierById(caseItem.dossierId);
-            String parentFolderId = dossier?.remoteFolderId ?? _gdrive.rootFolderId ?? 'root';
+            String parentFolderId = dossier?.remoteFolderId ?? 'root';
             if (dossier != null && (dossier.remoteFolderId == null || dossier.remoteFolderId!.isEmpty)) {
               final folderName = '${dossier.fullName}_${dossier.phoneNumber}';
-              parentFolderId = await _gdrive.createCustomerFolder(folderName: folderName);
+              parentFolderId = await vaultService.createCustomerFolder(folderName: folderName);
               await db.updateDossierRemoteFolderId(dossier.id, parentFolderId);
             }
-            final caseFolderId = await _gdrive.createCaseFolder(parentFolderId: parentFolderId, caseTitle: caseItem.title);
+            final caseFolderId = await vaultService.createCaseFolder(parentFolderId: parentFolderId, caseTitle: caseItem.title);
             await db.updateCaseRemoteFolderId(caseItem.id, caseFolderId);
-            newLogs.add('Case folder created in Google Drive: ${caseItem.title}');
+            newLogs.add('Case folder created in Cloud: ${caseItem.title}');
           }
         } else if (item.entityType == 'EXHIBIT') {
           final exhibit = await db.getExhibitById(item.entityId);
           if (exhibit != null) {
             if (item.operation == 'DELETE') {
               if (exhibit.remoteFileId != null) {
-                await _gdrive.deleteExhibit(exhibit.remoteFileId!);
-                newLogs.add('Deleted remote file from Google Drive: ${exhibit.fileName}');
+                await vaultService.deleteExhibit(exhibit.remoteFileId!);
+                newLogs.add('Deleted remote file from Cloud: ${exhibit.fileName}');
               }
             } else {
               final caseItem = await db.getCaseById(exhibit.caseId);
-              String parentFolderId = caseItem?.remoteFolderId ?? _gdrive.rootFolderId ?? 'root';
+              String parentFolderId = caseItem?.remoteFolderId ?? 'root';
 
               Uint8List fileBytes;
               if (exhibit.localPath != null && File(exhibit.localPath!).existsSync()) {
@@ -191,7 +245,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
                 fileBytes = Uint8List.fromList('SAMPLE EXHIBIT CONTENT FOR ${exhibit.fileName}'.codeUnits);
               }
 
-              final remoteId = await _gdrive.uploadExhibit(
+              final remoteId = await vaultService.uploadExhibit(
                 parentFolderId: parentFolderId,
                 fileName: exhibit.fileName,
                 mimeType: exhibit.mimeType,
@@ -199,7 +253,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
               );
 
               await db.updateExhibitRemoteId(exhibit.id, remoteId);
-              newLogs.add('Uploaded document to Google Drive: ${exhibit.fileName} (${(fileBytes.length / 1024).toStringAsFixed(1)} KB)');
+              newLogs.add('Uploaded document to Cloud: ${exhibit.fileName} (${(fileBytes.length / 1024).toStringAsFixed(1)} KB)');
             }
           }
         }
@@ -231,5 +285,6 @@ class SyncNotifier extends StateNotifier<SyncState> {
 
 final syncProvider = StateNotifierProvider<SyncNotifier, SyncState>((ref) {
   final gdrive = ref.watch(googleDriveServiceProvider);
-  return SyncNotifier(ref, gdrive);
+  final r2 = ref.watch(managedR2ServiceProvider);
+  return SyncNotifier(ref, gdrive, r2);
 });

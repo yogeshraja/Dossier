@@ -50,6 +50,12 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
       tooltip: 'Quick POS Register & Invoices',
     ),
     (
+      icon: Icons.analytics_outlined,
+      activeIcon: Icons.analytics_rounded,
+      label: 'Daily Register',
+      tooltip: 'End-of-Day Register & Cash Reconciliation',
+    ),
+    (
       icon: Icons.cloud_sync_outlined,
       activeIcon: Icons.cloud_sync_rounded,
       label: 'Vault Sync',

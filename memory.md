@@ -1,7 +1,7 @@
 # Project State & Memory: Dossier CRM & Kiosk Vault
 
 **Last Updated:** 2026-09-27  
-**Status:** Google Drive Cloud Vault Integration, Offline SQLite Outbox Sync Worker, Google Drive Web Links, and Responsive Sync Activity Console (24/24 tests passing)
+**Status:** ESC/POS Thermal Hardware Printing, Daily Sales & Cash Reconciliation Register, Managed Cloudflare R2 Vault & Air-Gapped Database Backup/Restore (26/26 tests passing)
 
 ---
 
@@ -9,6 +9,21 @@
 - **Stack:** Flutter 3.47.x (Dart 3.13.x) targeting Windows, Android, macOS, iOS, Linux, and Web (WASM).
 - **State Management:** Riverpod 2.x with reactive Drift SQLite stream providers and async sync notifiers.
 - **Local DB:** Drift (SQLite) with cross-platform native FFI and WASM + OPFS support.
+- **Direct ESC/POS Thermal Printing & Hardware Driver (`lib/domain/services/esc_pos_printer_service.dart`):**
+  - Formats raw ESC/POS command byte buffers for 58mm and 80mm thermal receipt printers.
+  - Implements paper cutting (`GS V 66 0`), cash drawer kick pulse (`ESC p 0 25 250`), text size multipliers, alignments, item table alignment, and receipt divider lines.
+  - Standard Walk-in POS / Case Receipts & End-Of-Day (EOD) Daily Cash Closure Register Slips.
+- **Daily Sales, Cash Reconciliation & EOD Register (`lib/features/billing_pos/screens/daily_sales_register_screen.dart`):**
+  - Aggregates live Drift SQLite invoices, sales totals, and outstanding dues across date filters (Today, Yesterday, This Week, This Month).
+  - Cash Drawer Float & Physical Count audit with dynamic status badges (`BALANCED`, `OVERAGE`, `SHORTAGE`).
+  - Top services volume breakdown bar graph and itemized transaction ledger.
+  - 1-Tap "Print EOD Slip (ESC/POS)" dialog with monospace receipt simulation and raw byte copying.
+- **Managed Cloudflare R2 Vault & Air-Gapped Disaster Recovery (`lib/data/remote/r2/` & `lib/domain/services/backup_restore_service.dart`):**
+  - `ManagedR2VaultService`: Presigned S3 chunk streaming, zero egress fee cloud vault, and fallback mock testing.
+  - `BackupRestoreService`: Full SQLite snapshot serialization to portable `.dossier` JSON bundles and 1-click database transaction restore.
+  - Integrated in `VaultSyncScreen` with live tier switching (Google Drive vs Managed R2 vs Air-Gapped Local).
+- **Test Suite (`test/widget_test.dart`):**
+  - 26 comprehensive test suites passing with 0 warnings / 0 analyzer issues across desktop, tablet, and mobile breakpoints.
 - **Google Drive Cloud Vault Integration (`lib/data/remote/gdrive/` & `lib/features/sync/`):**
   - `GoogleDriveVaultService`: Multi-tier authentication supporting live Google OAuth2 (`google_sign_in` + `googleapis/drive/v3.dart`) and local sandbox mock fallback for zero-setup kiosk testing.
   - Automatic Folder Hierarchy: Provisions `/Dossier_Workspace/<Customer_Phone_Name>/<Case_ID_Title>/<Exhibits>` in Google Drive with parent folder linking.

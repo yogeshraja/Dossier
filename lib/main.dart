@@ -11,6 +11,7 @@ import 'package:dossier/features/cases/widgets/case_intake_pane.dart';
 import 'package:dossier/features/billing_pos/widgets/billing_hub_pane.dart';
 import 'package:dossier/features/media_prep/screens/media_prep_studio_screen.dart';
 import 'package:dossier/features/billing_pos/screens/quick_pos_screen.dart';
+import 'package:dossier/features/billing_pos/screens/daily_sales_register_screen.dart';
 import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
 import 'package:dossier/features/settings/screens/settings_screen.dart';
 import 'package:dossier/presentation/screens/splash_screen.dart';
@@ -273,8 +274,10 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
       case 2:
         return const QuickPosScreen();
       case 3:
-        return const VaultSyncScreen();
+        return const DailySalesRegisterScreen();
       case 4:
+        return const VaultSyncScreen();
+      case 5:
         return const SettingsScreen();
       default:
         return const SizedBox();

@@ -5,6 +5,9 @@ import 'package:dossier/main.dart';
 import 'package:dossier/presentation/screens/splash_screen.dart';
 import 'package:dossier/features/media_prep/screens/media_prep_studio_screen.dart';
 import 'package:dossier/features/billing_pos/screens/quick_pos_screen.dart';
+import 'package:dossier/features/billing_pos/screens/daily_sales_register_screen.dart';
+import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
+import 'package:dossier/domain/services/esc_pos_printer_service.dart';
 import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
 import 'package:dossier/features/settings/screens/settings_screen.dart';
 import 'package:dossier/features/auth/screens/auth_screen.dart';
@@ -626,6 +629,74 @@ void main() {
       expect(find.text('Confirm & Record'), findsOneWidget);
     });
   });
+
+  group('Daily Sales & ESC/POS Thermal Printer Tests', () {
+    testWidgets('DailySalesRegisterScreen renders without overflows on phone & desktop', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            recentInvoicesStreamProvider.overrideWith((ref) => Stream.value([])),
+          ],
+          child: const MaterialApp(
+            home: DailySalesRegisterScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Daily Sales & Cash Register'), findsOneWidget);
+      expect(find.text('Cash Drawer Audit & Float'), findsOneWidget);
+      expect(find.text('Print EOD Slip'), findsOneWidget);
+    });
+
+    test('EscPosPrinterService generates valid formatted bytes', () {
+      final posBytes = EscPosPrinterService.buildPosReceiptBytes(
+        storeName: 'CSC Center Test',
+        storeAddress: 'Main St',
+        storePhone: '9876543210',
+        receiptNo: 'REC-001',
+        date: DateTime.now(),
+        customerName: 'Aarav Kumar',
+        customerPhone: '9876543210',
+        items: [
+          {'title': 'Aadhaar Print', 'quantity': 1, 'amount': 50.0},
+          {'title': 'Lamination', 'quantity': 2, 'amount': 40.0},
+        ],
+        subtotal: 90.0,
+        discount: 0.0,
+        total: 90.0,
+        paidAmount: 90.0,
+        paymentMode: 'CASH',
+      );
+
+      expect(posBytes, isNotEmpty);
+      expect(posBytes.length, greaterThan(20));
+
+      final eodBytes = EscPosPrinterService.buildEodRegisterBytes(
+        kioskName: 'CSC Center Test',
+        operatorName: 'Operator',
+        reportDate: DateTime.now(),
+        totalInvoices: 5,
+        totalGrossSales: 450.0,
+        totalCashCollected: 300.0,
+        totalUpiCollected: 150.0,
+        totalPendingDues: 0.0,
+        drawerOpeningCash: 500.0,
+        drawerPhysicalCash: 800.0,
+        serviceBreakdown: {'Aadhaar': 3, 'PAN Card': 2},
+      );
+
+      expect(eodBytes, isNotEmpty);
+      expect(eodBytes.length, greaterThan(30));
+    });
+  });
 }
+
 
 
