@@ -2,6 +2,45 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppThemes {
+  // Glassmorphic Surface Constants
+  static const Color glassSurfaceDark = Color(0xCC0F172A); // Slate 900 80% opacity
+  static const Color glassSurfaceLight = Color(0xEEFFFFFF); // Pure white 93% opacity
+  static const Color glassBorderDark = Color(0x22FFFFFF); // Subtle white inner bevel
+  static const Color glassBorderLight = Color(0x1F0F172A); // Subtle dark outer bevel
+
+  /// Helper to build glassmorphism decoration
+  static BoxDecoration glassDecoration({
+    required bool isDark,
+    double borderRadius = 14,
+    Color? customColor,
+    Border? border,
+    bool glow = false,
+  }) {
+    return BoxDecoration(
+      color: customColor ?? (isDark ? glassSurfaceDark : glassSurfaceLight),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: border ??
+          Border.all(
+            color: isDark ? glassBorderDark : glassBorderLight,
+            width: 1,
+          ),
+      boxShadow: [
+        BoxShadow(
+          color: isDark ? Colors.black.withValues(alpha: 0.35) : const Color(0x140F172A),
+          blurRadius: 16,
+          offset: const Offset(0, 6),
+        ),
+        if (glow)
+          BoxShadow(
+            color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.25 : 0.15),
+            blurRadius: 20,
+            spreadRadius: 1,
+            offset: const Offset(0, 4),
+          ),
+      ],
+    );
+  }
+
   // --- Modern Sleek Dark Theme (Slate & Deep Indigo / Cyan) ---
   static ThemeData get darkTheme {
     const primaryColor = Color(0xFF6366F1); // Indigo 500
@@ -15,6 +54,23 @@ class AppThemes {
     final textTheme = GoogleFonts.plusJakartaSansTextTheme(baseTextTheme).apply(
       bodyColor: const Color(0xFFF1F5F9),
       displayColor: const Color(0xFFFFFFFF),
+    ).copyWith(
+      bodyLarge: GoogleFonts.plusJakartaSans(
+        color: const Color(0xFFF1F5F9),
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+      bodyMedium: GoogleFonts.plusJakartaSans(
+        color: const Color(0xFFE2E8F0),
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+      titleMedium: GoogleFonts.plusJakartaSans(
+        fontWeight: FontWeight.w600,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+      titleLarge: GoogleFonts.plusJakartaSans(
+        fontWeight: FontWeight.bold,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
     );
 
     return ThemeData(
@@ -125,6 +181,23 @@ class AppThemes {
     final textTheme = GoogleFonts.plusJakartaSansTextTheme(baseTextTheme).apply(
       bodyColor: const Color(0xFF0F172A),
       displayColor: const Color(0xFF0F172A),
+    ).copyWith(
+      bodyLarge: GoogleFonts.plusJakartaSans(
+        color: const Color(0xFF0F172A),
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+      bodyMedium: GoogleFonts.plusJakartaSans(
+        color: const Color(0xFF334155),
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+      titleMedium: GoogleFonts.plusJakartaSans(
+        fontWeight: FontWeight.w600,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+      titleLarge: GoogleFonts.plusJakartaSans(
+        fontWeight: FontWeight.bold,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
     );
 
     return ThemeData(
@@ -222,4 +295,3 @@ class AppThemes {
     );
   }
 }
-

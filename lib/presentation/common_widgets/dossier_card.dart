@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 enum DossierCardVariant {
@@ -95,15 +96,21 @@ class _DossierCardState extends State<DossierCard> with SingleTickerProviderStat
         resolvedBgColor = widget.backgroundColor ?? (isDark ? const Color(0xFF1E293B) : Colors.white);
         resolvedBorder = widget.isSelected
             ? Border.all(color: primaryColor, width: 2)
-            : Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), width: 1);
+            : Border.all(
+                color: widget.borderColor ?? (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                width: 1,
+              );
         break;
 
       case DossierCardVariant.outlined:
-        resolvedBgColor = widget.backgroundColor ?? (isDark ? const Color(0xFF0F172A).withValues(alpha: 0.7) : Colors.white);
+        resolvedBgColor = widget.backgroundColor ?? (isDark ? const Color(0xFF0F172A).withValues(alpha: 0.85) : Colors.white);
         resolvedBorder = widget.isSelected
             ? Border.all(color: primaryColor, width: 2)
             : Border.all(
-                color: widget.borderColor ?? (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                color: widget.borderColor ??
+                    (isDark
+                        ? (_isHovered ? primaryColor.withValues(alpha: 0.4) : const Color(0xFF334155))
+                        : (_isHovered ? primaryColor.withValues(alpha: 0.4) : const Color(0xFFE2E8F0))),
                 width: widget.isSelected ? 2 : 1,
               );
         break;
@@ -111,13 +118,13 @@ class _DossierCardState extends State<DossierCard> with SingleTickerProviderStat
       case DossierCardVariant.glass:
         resolvedBgColor = widget.backgroundColor ??
             (isDark
-                ? const Color(0xFF1E293B).withValues(alpha: _isHovered ? 0.85 : 0.65)
-                : Colors.white.withValues(alpha: _isHovered ? 0.95 : 0.8));
+                ? const Color(0xFF0F172A).withValues(alpha: _isHovered ? 0.85 : 0.65)
+                : Colors.white.withValues(alpha: _isHovered ? 0.92 : 0.75));
         resolvedBorder = Border.all(
           color: widget.isSelected
               ? primaryColor
               : (_isHovered
-                  ? primaryColor.withValues(alpha: 0.4)
+                  ? primaryColor.withValues(alpha: 0.5)
                   : (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08))),
           width: widget.isSelected ? 2 : 1,
         );
@@ -185,14 +192,13 @@ class _DossierCardState extends State<DossierCard> with SingleTickerProviderStat
                             ],
                           ),
                           if (widget.subtitle != null) ...[
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 3),
                             Text(
                               widget.subtitle!,
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: 12.5,
                                 color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ],
@@ -215,6 +221,11 @@ class _DossierCardState extends State<DossierCard> with SingleTickerProviderStat
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
       margin: widget.margin,
+      transform: Matrix4.translationValues(
+        0,
+        _isHovered && widget.animateHover && widget.onTap != null ? -3.0 : 0.0,
+        0,
+      ),
       decoration: BoxDecoration(
         color: resolvedBgColor,
         gradient: resolvedGradient,
@@ -229,39 +240,29 @@ class _DossierCardState extends State<DossierCard> with SingleTickerProviderStat
             ),
           if (_isHovered && widget.animateHover && widget.onTap != null)
             BoxShadow(
-              color: primaryColor.withValues(alpha: isDark ? 0.15 : 0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              color: primaryColor.withValues(alpha: isDark ? 0.25 : 0.12),
+              blurRadius: 18,
+              spreadRadius: 1,
+              offset: const Offset(0, 6),
             ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          onTap: widget.onTap != null
-              ? () {
-                  _controller.forward().then((_) => _controller.reverse());
-                  widget.onTap!();
-                }
-              : null,
-          onLongPress: widget.onLongPress,
-          onTapDown: widget.onTap != null ? (_) => _controller.forward() : null,
-          onTapUp: widget.onTap != null ? (_) => _controller.reverse() : null,
-          onTapCancel: widget.onTap != null ? () => _controller.reverse() : null,
-          child: Padding(
-            padding: widget.padding,
-            child: content,
-          ),
-        ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        child: widget.variant == DossierCardVariant.glass
+            ? BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: _buildInkWell(content),
+              )
+            : _buildInkWell(content),
       ),
     );
 
-    if (widget.onTap != null && widget.animateHover) {
+    if (widget.animateHover) {
       return MouseRegion(
         onEnter: (_) => setState(() => _isHovered = true),
         onExit: (_) => setState(() => _isHovered = false),
-        cursor: SystemMouseCursors.click,
+        cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
         child: ScaleTransition(
           scale: _scaleAnimation,
           child: cardBody,
@@ -270,5 +271,28 @@ class _DossierCardState extends State<DossierCard> with SingleTickerProviderStat
     }
 
     return cardBody;
+  }
+
+  Widget _buildInkWell(Widget content) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+        onTap: widget.onTap != null
+            ? () {
+                _controller.forward().then((_) => _controller.reverse());
+                widget.onTap!();
+              }
+            : null,
+        onLongPress: widget.onLongPress,
+        onTapDown: widget.onTap != null ? (_) => _controller.forward() : null,
+        onTapUp: widget.onTap != null ? (_) => _controller.reverse() : null,
+        onTapCancel: widget.onTap != null ? () => _controller.reverse() : null,
+        child: Padding(
+          padding: widget.padding,
+          child: content,
+        ),
+      ),
+    );
   }
 }

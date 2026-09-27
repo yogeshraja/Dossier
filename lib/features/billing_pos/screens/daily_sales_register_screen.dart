@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dossier/domain/services/esc_pos_printer_service.dart';
+import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/features/billing_pos/providers/sales_report_provider.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
@@ -9,6 +8,8 @@ import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 import 'package:dossier/presentation/common_widgets/dossier_panel.dart';
+import 'package:dossier/presentation/widgets/sparkline_chart.dart';
+import 'package:dossier/presentation/widgets/animated_thermal_receipt.dart';
 
 class DailySalesRegisterScreen extends ConsumerStatefulWidget {
   const DailySalesRegisterScreen({super.key});
@@ -23,8 +24,8 @@ class _DailySalesRegisterScreenState extends ConsumerState<DailySalesRegisterScr
 
   @override
   void dispose() {
-    _floatController.dispose;
-    _countedController.dispose;
+    _floatController.dispose();
+    _countedController.dispose();
     super.dispose();
   }
 
@@ -35,163 +36,60 @@ class _DailySalesRegisterScreenState extends ConsumerState<DailySalesRegisterScr
     final opening = double.tryParse(_floatController.text) ?? reportState.openingCashFloat;
     final physical = double.tryParse(_countedController.text) ?? reportState.physicalCountedCash;
 
-    final eodBytes = EscPosPrinterService.buildEodRegisterBytes(
-      kioskName: settings.kioskName.isNotEmpty ? settings.kioskName : 'Dossier Kiosk Center',
-      operatorName: auth.currentOperator?.fullName ?? 'Kiosk Admin',
-      reportDate: DateTime.now(),
-      totalInvoices: summary.totalOrders,
-      totalGrossSales: summary.totalGrossSales,
-      totalCashCollected: summary.totalCashCollected,
-      totalUpiCollected: summary.totalUpiCollected,
-      totalPendingDues: summary.totalPendingDues,
-      drawerOpeningCash: opening,
-      drawerPhysicalCash: physical,
-      serviceBreakdown: summary.serviceCountBreakdown,
-      currencySymbol: settings.currencySymbol,
-      width: ThermalPaperWidth.mm58,
-    );
+    final eodItems = summary.serviceCountBreakdown.entries
+        .map((e) => ReceiptLineItem(
+              title: e.key,
+              qty: e.value,
+              unitPrice: 0.0,
+              total: 0.0,
+            ))
+        .toList();
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440, maxHeight: 680),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.receipt_long_rounded, color: Color(0xFF6366F1), size: 22),
-                          const SizedBox(width: 8),
-                          const Text('ESC/POS 58mm EOD Slip', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
-                      ),
-                      child: SingleChildScrollView(
-                        child: Text(
-                          _generatePreviewText(summary, settings.currencySymbol, opening, physical, auth.currentOperator?.fullName ?? 'Operator', settings.kioskName),
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11.5,
-                            height: 1.4,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      DossierButton(
-                        text: 'Copy Raw Bytes',
-                        icon: Icons.copy_rounded,
-                        variant: DossierButtonVariant.outline,
-                        size: DossierButtonSize.sm,
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: eodBytes.toString()));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('ESC/POS raw bytes copied to clipboard!')),
-                          );
-                        },
-                      ),
-                      DossierButton(
-                        text: 'Print to Hardware',
-                        icon: Icons.print_rounded,
-                        variant: DossierButtonVariant.primary,
-                        size: DossierButtonSize.sm,
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              backgroundColor: Color(0xFF10B981),
-                              content: Text('Sent ESC/POS EOD slip payload to thermal printer!'),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+    AnimatedThermalReceiptDialog.show(
+      context,
+      invoiceNumber: 'EOD-${DateTime.now().millisecondsSinceEpoch % 100000}',
+      paymentMode: 'EOD REGISTER RECONCILIATION',
+      subtotal: summary.totalGrossSales,
+      grandTotal: summary.totalGrossSales,
+      amountTendered: physical,
+      changeDue: physical > (opening + summary.totalCashCollected) ? physical - (opening + summary.totalCashCollected) : null,
+      items: eodItems.isNotEmpty
+          ? eodItems
+          : [
+              ReceiptLineItem(
+                title: 'Total Register Transactions',
+                qty: summary.totalOrders,
+                unitPrice: summary.totalGrossSales,
+                total: summary.totalGrossSales,
+              )
+            ],
+      customerName: 'Operator: ${auth.currentOperator?.fullName ?? "Kiosk Admin"}',
+      settings: settings,
     );
   }
 
-  String _generatePreviewText(
-    SalesReportSummary summary,
-    String sym,
-    double opening,
-    double physical,
-    String operatorName,
-    String storeName,
-  ) {
-    final expected = opening + summary.totalCashCollected;
-    final diff = physical - expected;
-    final date = DateTime.now();
-
-    final buffer = StringBuffer();
-    buffer.writeln('================================');
-    buffer.writeln('     *** DAILY EOD REGISTER *** ');
-    buffer.writeln('  ${storeName.isNotEmpty ? storeName : "Dossier Kiosk Center"}');
-    buffer.writeln('================================');
-    buffer.writeln('Date: ${date.day}/${date.month}/${date.year}  Time: ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}');
-    buffer.writeln('Operator: $operatorName');
-    buffer.writeln('Total Orders: ${summary.totalOrders}');
-    buffer.writeln('--------------------------------');
-    buffer.writeln('FINANCIAL SUMMARY:');
-    buffer.writeln('Gross Sales:        $sym${summary.totalGrossSales.toStringAsFixed(2)}');
-    buffer.writeln('Cash Collected:     $sym${summary.totalCashCollected.toStringAsFixed(2)}');
-    buffer.writeln('UPI / Online:       $sym${summary.totalUpiCollected.toStringAsFixed(2)}');
-    buffer.writeln('Pending Dues:       $sym${summary.totalPendingDues.toStringAsFixed(2)}');
-    buffer.writeln('--------------------------------');
-    buffer.writeln('DRAWER RECONCILIATION:');
-    buffer.writeln('Opening Float:      $sym${opening.toStringAsFixed(2)}');
-    buffer.writeln('+ Cash Inflow:      $sym${summary.totalCashCollected.toStringAsFixed(2)}');
-    buffer.writeln('Expected Cash:      $sym${expected.toStringAsFixed(2)}');
-    buffer.writeln('Counted Cash:       $sym${physical.toStringAsFixed(2)}');
-    buffer.writeln('Variance:           ${diff == 0 ? "BALANCED" : (diff > 0 ? "+$sym${diff.toStringAsFixed(2)} (OVER)" : "-$sym${diff.abs().toStringAsFixed(2)} (SHORT)")}');
-    buffer.writeln('--------------------------------');
-    if (summary.serviceCountBreakdown.isNotEmpty) {
-      buffer.writeln('SERVICE BREAKDOWN:');
-      summary.serviceCountBreakdown.forEach((service, count) {
-        buffer.writeln('${service.padRight(20).substring(0, 20)} x$count');
-      });
-      buffer.writeln('================================');
+  List<SparklinePoint> _generateHourlyPoints(List<Invoice> invoices) {
+    final Map<int, (double total, int count)> hourlyMap = {};
+    for (int h = 8; h <= 20; h++) {
+      hourlyMap[h] = (0.0, 0);
     }
-    buffer.writeln('Operator Sign: _________________');
-    buffer.writeln('Manager Sign:  _________________');
-    buffer.writeln('================================');
-    return buffer.toString();
+
+    for (final inv in invoices) {
+      final h = inv.createdAt.hour;
+      if (h >= 8 && h <= 20) {
+        final current = hourlyMap[h] ?? (0.0, 0);
+        hourlyMap[h] = (current.$1 + inv.grandTotal, current.$2 + 1);
+      }
+    }
+
+    return hourlyMap.entries.map((e) {
+      final hourLabel = '${e.key.toString().padLeft(2, '0')}:00';
+      return SparklinePoint(
+        label: hourLabel,
+        value: e.value.$1,
+        count: e.value.$2,
+      );
+    }).toList();
   }
 
   @override
@@ -325,6 +223,8 @@ class _DailySalesRegisterScreenState extends ConsumerState<DailySalesRegisterScr
             // Summary Metrics Cards
             summaryAsync.when(
               data: (summary) {
+                final hourlyPoints = _generateHourlyPoints(summary.invoices);
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -347,7 +247,20 @@ class _DailySalesRegisterScreenState extends ConsumerState<DailySalesRegisterScr
                         );
                       },
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
+
+                    // Interactive Sparkline Micro-Chart Card
+                    DossierCard(
+                      variant: DossierCardVariant.glass,
+                      padding: const EdgeInsets.all(16),
+                      child: SparklineChart(
+                        points: hourlyPoints,
+                        height: 110,
+                        currencySymbol: sym,
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
 
                     // Cash Drawer Reconciliation & Volume Breakdown
                     LayoutBuilder(
@@ -453,7 +366,7 @@ class _DailySalesRegisterScreenState extends ConsumerState<DailySalesRegisterScr
 
   Widget _buildMetricCard(String title, String value, IconData icon, Color color, String sub) {
     return DossierCard(
-      variant: DossierCardVariant.elevated,
+      variant: DossierCardVariant.glass,
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -496,7 +409,7 @@ class _DailySalesRegisterScreenState extends ConsumerState<DailySalesRegisterScr
     final variance = physical - expected;
 
     return DossierCard(
-      variant: DossierCardVariant.elevated,
+      variant: DossierCardVariant.glass,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -601,7 +514,7 @@ class _DailySalesRegisterScreenState extends ConsumerState<DailySalesRegisterScr
 
   Widget _buildVolumeBreakdownCard(SalesReportSummary summary, bool isDark) {
     return DossierCard(
-      variant: DossierCardVariant.elevated,
+      variant: DossierCardVariant.glass,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

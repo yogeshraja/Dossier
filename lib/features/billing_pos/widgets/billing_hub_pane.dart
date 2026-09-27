@@ -10,6 +10,7 @@ import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
+import 'package:dossier/presentation/widgets/animated_thermal_receipt.dart';
 
 class BillingHubPane extends ConsumerWidget {
   const BillingHubPane({super.key});
@@ -253,18 +254,32 @@ class BillingHubPane extends ConsumerWidget {
                         ),
                         const SizedBox(height: 10),
                         DossierButton(
-                          text: 'Print 58mm Receipt Slip',
+                          text: 'Preview & Print Thermal Slip',
                           icon: Icons.print_rounded,
                           size: DossierButtonSize.sm,
                           customColor: const Color(0xFF0F172A),
                           isFullWidth: true,
                           tooltip: 'Send ESC/POS receipt stream to USB/Bluetooth thermal printer',
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('ESC/POS byte stream sent to 58mm Thermal Receipt Printer!'),
-                                backgroundColor: Color(0xFF10B981),
-                              ),
+                            AnimatedThermalReceiptDialog.show(
+                              context,
+                              invoiceNumber: 'RCP-${activeCase.id.substring(0, 6).toUpperCase()}',
+                              paymentMode: balanceDue > 0 ? 'PARTIAL PAYMENT' : 'PAID IN FULL',
+                              subtotal: activeCase.totalEstimatedAmount,
+                              grandTotal: activeCase.totalEstimatedAmount,
+                              amountTendered: activeCase.advancePaid,
+                              changeDue: null,
+                              items: [
+                                ReceiptLineItem(
+                                  title: activeCase.title,
+                                  qty: 1,
+                                  unitPrice: activeCase.totalEstimatedAmount,
+                                  total: activeCase.totalEstimatedAmount,
+                                ),
+                              ],
+                              customerName: activeDossier.fullName,
+                              customerPhone: activeDossier.phoneNumber,
+                              settings: settings,
                             );
                           },
                         ),

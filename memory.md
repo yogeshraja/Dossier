@@ -1,7 +1,7 @@
 # Project State & Memory: Dossier CRM & Kiosk Vault
 
 **Last Updated:** 2026-09-27  
-**Status:** ESC/POS Thermal Hardware Printing, Daily Sales & Cash Reconciliation Register, Managed Cloudflare R2 Vault & Air-Gapped Database Backup/Restore (26/26 tests passing)
+**Status:** Complete 5-Pillar Kiosk UI Modernization Phase Implemented & Verified (31/31 tests passing, 0 analyzer issues)
 
 ---
 
@@ -9,47 +9,51 @@
 - **Stack:** Flutter 3.47.x (Dart 3.13.x) targeting Windows, Android, macOS, iOS, Linux, and Web (WASM).
 - **State Management:** Riverpod 2.x with reactive Drift SQLite stream providers and async sync notifiers.
 - **Local DB:** Drift (SQLite) with cross-platform native FFI and WASM + OPFS support.
-- **Direct ESC/POS Thermal Printing & Hardware Driver (`lib/domain/services/esc_pos_printer_service.dart`):**
-  - Formats raw ESC/POS command byte buffers for 58mm and 80mm thermal receipt printers.
-  - Implements paper cutting (`GS V 66 0`), cash drawer kick pulse (`ESC p 0 25 250`), text size multipliers, alignments, item table alignment, and receipt divider lines.
-  - Standard Walk-in POS / Case Receipts & End-Of-Day (EOD) Daily Cash Closure Register Slips.
-- **Daily Sales, Cash Reconciliation & EOD Register (`lib/features/billing_pos/screens/daily_sales_register_screen.dart`):**
-  - Aggregates live Drift SQLite invoices, sales totals, and outstanding dues across date filters (Today, Yesterday, This Week, This Month).
-  - Cash Drawer Float & Physical Count audit with dynamic status badges (`BALANCED`, `OVERAGE`, `SHORTAGE`).
-  - Top services volume breakdown bar graph and itemized transaction ledger.
-  - 1-Tap "Print EOD Slip (ESC/POS)" dialog with monospace receipt simulation and raw byte copying.
-- **Managed Cloudflare R2 Vault & Air-Gapped Disaster Recovery (`lib/data/remote/r2/` & `lib/domain/services/backup_restore_service.dart`):**
-  - `ManagedR2VaultService`: Presigned S3 chunk streaming, zero egress fee cloud vault, and fallback mock testing.
-  - `BackupRestoreService`: Full SQLite snapshot serialization to portable `.dossier` JSON bundles and 1-click database transaction restore.
-  - Integrated in `VaultSyncScreen` with live tier switching (Google Drive vs Managed R2 vs Air-Gapped Local).
-- **Test Suite (`test/widget_test.dart`):**
-  - 26 comprehensive test suites passing with 0 warnings / 0 analyzer issues across desktop, tablet, and mobile breakpoints.
-- **Google Drive Cloud Vault Integration (`lib/data/remote/gdrive/` & `lib/features/sync/`):**
-  - `GoogleDriveVaultService`: Multi-tier authentication supporting live Google OAuth2 (`google_sign_in` + `googleapis/drive/v3.dart`) and local sandbox mock fallback for zero-setup kiosk testing.
-  - Automatic Folder Hierarchy: Provisions `/Dossier_Workspace/<Customer_Phone_Name>/<Case_ID_Title>/<Exhibits>` in Google Drive with parent folder linking.
-  - Byte Streaming Upload: Native byte array and stream uploads with MIME type resolution and live progress callbacks (0-100%).
-  - Direct Drive Web Viewer: Generates web links (`https://drive.google.com/file/d/<fileId>/view`) for exhibits and `https://drive.google.com/drive/folders/<folderId>` for workspace folders.
-  - Outbox Sync Worker (`SyncNotifier` in `lib/features/sync/providers/sync_provider.dart`): Processes Drift SQLite `SyncQueue` mutations sequentially, uploads exhibits, persists remote IDs in `Exhibits.remoteFileId`, and transitions status to `SUCCESS` with retry tracking.
-  - `VaultSyncScreen`: Google Drive account connection card, "Open in Drive" web launcher, live sync progress bar, storage plan switcher, Drift SQLite Outbox table, and terminal-style audit log console.
-  - `ExhibitPreviewDialog`: Displays `DRIVE SYNCED` badge with file ID and 1-tap "Drive View" button.
-- **Visual Design & Typography:**
-  - Integrated `google_fonts` (Plus Jakarta Sans) with crisp weights, tailored line heights, and high-contrast letter spacing.
-  - Refined Slate 900 / Slate 50 design system with Deep Indigo 500, Violet 500, and Emerald 500 accents.
-- **Micro-Interactions & Animated Components:**
-  - `DossierButton`: Animated iridescent rainbow border sweep (`LinearGradient` angle sweep + fade-in on hover), press-scale micro-feedback, and built-in contextual `Tooltip`.
-  - `CollapsibleSidebar` (`lib/presentation/navigation/collapsible_sidebar.dart`): Animated collapsible sidebar (240px <-> 76px) with brand branding, active item indicator pills, operator profile card, theme mode switcher, and automatic hover tooltips in rail mode.
-  - Material Architecture Fix: Wrapped `DossierDialog`, `DossierPanel`, and `DossierCard` in root `Material` containers to eliminate ListTile ink splash assertion exceptions.
-- **POS & Billing Workflows (`lib/features/billing_pos/`):**
-  - `QuickPosScreen`: Dynamically queries Drift SQLite `activeServicesStreamProvider` with category filters and search. Real invoices written to SQLite with 58mm thermal receipt preview.
-  - `RecordPaymentDialog`: Custom amount, quick presets (`₹50`, `₹100`, `₹500`, `Full Due`), payment mode switching, and direct DB update of `Cases.advancePaid`.
-  - `BillingHubPane`: Dynamic UPI QR code generator, 1-tap WhatsApp notifications, and thermal slip preview.
-- **Test Suite (`test/widget_test.dart`):**
-  - 24 comprehensive test suites passing with 0 warnings / 0 analyzer issues across desktop, tablet, and mobile breakpoints.
+
+### 5-Pillar UI Modernization Suite
+1. **Glassmorphic Design System & Ambient Surface Layering (`lib/app/theme.dart`, `lib/presentation/common_widgets/dossier_card.dart`):**
+   - `AppThemes.glassDecoration()` with `glassSurfaceDark` (`0xCC0F172A`) and `glassSurfaceLight` (`0xEEFFFFFF`).
+   - `DossierCardVariant.glass` utilizing inner `BackdropFilter(sigmaX: 12, sigmaY: 12)` with subtle inner bevel highlight (`0x22FFFFFF` / `0x1F0F172A`).
+   - OpenType `FontFeature.tabularFigures()` applied across all text themes to keep financial figures, receipts, and timestamps monospaced and vertically aligned.
+   - Smooth `-3px` translateY hover lift physics and ambient colored shadow bloom.
+
+2. **Global Command Palette & Universal Quick Search (`lib/presentation/widgets/command_palette_dialog.dart`):**
+   - `Ctrl + K` / `Cmd + K` global keyboard shortcut with `CallbackShortcuts` and sidebar search trigger.
+   - Fast fuzzy search and keyboard navigation (Up, Down, Enter, Escape) across customer dossiers, active cases, POS services, navigation routes, and system actions.
+   - Visual category badges (`[Customer Dossiers]`, `[Active Cases]`, `[Quick POS]`, `[Navigation]`, `[System]`).
+
+3. **Touch POS Quick-Cash Tender Pad & Change Calculator (`lib/features/billing_pos/widgets/quick_tender_pad.dart`):**
+   - Instant touch numpad (`0-9`, `00`, `.`, `C`, `⌫`) for cash transactions at kiosk counters.
+   - Smart currency denomination chips (`Exact`, `+₹50`, `+₹100`, nearest rounded ₹50/₹100/₹500 bills).
+   - Real-time return change status pill (Emerald `Return Customer Change: ₹X.XX` vs Amber `Shortfall Due: ₹X.XX`).
+   - Integrated into `QuickPosScreen` and `RecordPaymentDialog`.
+
+4. **Animated Thermal Slip Paper-Feed Previewer (`lib/presentation/widgets/animated_thermal_receipt.dart`):**
+   - Custom `CustomPainter` `_SerratedEdgePainter` rendering realistic zigzag serrated tear edges.
+   - Authentic ivory thermal receipt styling (`#FAF8F5`) with monospace thermal typography (`Space Mono`).
+   - Dot leaders, itemized line tables, barcode simulation, and slide-up printer paper-feed animation.
+   - 1-Click ESC/POS raw hardware printer dispatch (`EscPosPrinterService.buildPosReceiptBytes`) and clipboard text copy.
+   - Integrated into `BillingHubPane`, `QuickPosScreen`, and `DailySalesRegisterScreen`.
+
+5. **Interactive Sparkline Micro-Chart (`lib/presentation/widgets/sparkline_chart.dart`):**
+   - Pure Dart cubic bezier curve graph with smooth gradient fill under the curve.
+   - Interactive touch/hover scrub line with tooltip popover displaying exact hour, revenue, and transaction volume.
+   - Peak value detection badge and baseline grid lines.
+   - Integrated into `DailySalesRegisterScreen` for live hourly sales velocity analysis.
 
 ---
 
-## 2. Commit History
-- `[HEAD]`: `feat(ui): add rainbow hover border sweep to buttons, collapsible animated sidebar, and Google Fonts typography`
+## 2. Testing & Quality Assurance
+- **Total Tests:** 31/31 unit, integration, and widget tests passing (100% pass rate).
+- **Analyzer Status:** 0 errors, 0 warnings, 0 lints.
+- **Responsiveness:** Validated on viewport widths from 320px mobile up to 1440px multi-pane desktop workstation with 0 RenderFlex overflows.
+
+---
+
+## 3. Commit History
+- `[HEAD]`: `feat(modernization): implement 5-pillar UI overhaul with glassmorphism, Ctrl+K command palette, quick cash tender pad, animated thermal receipts, and sparkline charts`
+- `[PREV]`: `feat(printing): add ESC/POS raw hardware byte driver, Daily Sales register, and Cloudflare R2 backup vault`
+- `[PREV]`: `feat(ui): add rainbow hover border sweep to buttons, collapsible animated sidebar, and Google Fonts typography`
 - `[PREV]`: `feat(ux): overhaul UI consistency, dynamic POS catalog, case notes, and direct payment workflows`
 - `[PREV]`: `feat(attachments): implement real file picking, document preview, exhibit deletion, and zero-dummy-data clean state`
 - `[PREV]`: `feat(auth): add offline-first Sign-In, Sign-Up, and Quick 4-Digit PIN unlock workflow with multi-operator switching`

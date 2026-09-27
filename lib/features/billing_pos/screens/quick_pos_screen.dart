@@ -10,8 +10,9 @@ import 'package:dossier/domain/services/upi_qr_service.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
-import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
+import 'package:dossier/features/billing_pos/widgets/quick_tender_pad.dart';
+import 'package:dossier/presentation/widgets/animated_thermal_receipt.dart';
 
 class QuickPosScreen extends ConsumerStatefulWidget {
   const QuickPosScreen({super.key});
@@ -62,9 +63,46 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
     return sum;
   }
 
+  void _openCashTenderModal({
+    required BuildContext context,
+    required double totalAmount,
+    required List<Service> services,
+    required KioskSettings settings,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: QuickTenderPad(
+              totalAmount: totalAmount,
+              onCompletePayment: (tendered, change) {
+                Navigator.of(dialogCtx).pop();
+                _completeCheckout(
+                  paymentMode: 'CASH',
+                  totalAmount: totalAmount,
+                  tenderedAmount: tendered,
+                  changeAmount: change,
+                  services: services,
+                  settings: settings,
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _completeCheckout({
     required String paymentMode,
     required double totalAmount,
+    double? tenderedAmount,
+    double? changeAmount,
     required List<Service> services,
     required KioskSettings settings,
   }) async {
@@ -79,13 +117,12 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
         final s = services.where((item) => item.id == entry.key).firstOrNull;
         final title = s?.name ?? 'Counter Service';
         final unitPrice = s != null ? (s.defaultPortalFee + s.defaultServiceFee) : 0.0;
-        return {
-          'id': entry.key,
-          'title': title,
-          'qty': entry.value,
-          'unitPrice': unitPrice,
-          'total': unitPrice * entry.value,
-        };
+        return ReceiptLineItem(
+          title: title,
+          qty: entry.value,
+          unitPrice: unitPrice,
+          total: unitPrice * entry.value,
+        );
       }).toList();
 
       await db.insertInvoice(
@@ -103,11 +140,14 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
       if (!mounted) return;
       setState(() => _cart.clear());
 
-      _showReceiptDialog(
-        context: context,
-        invoiceId: invoiceId,
+      AnimatedThermalReceiptDialog.show(
+        context,
+        invoiceNumber: invoiceId,
         paymentMode: paymentMode,
-        totalAmount: totalAmount,
+        subtotal: totalAmount,
+        grandTotal: totalAmount,
+        amountTendered: tenderedAmount,
+        changeDue: changeAmount,
         items: cartItems,
         settings: settings,
       );
@@ -117,89 +157,6 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
         SnackBar(content: Text('Error saving sale: $e'), backgroundColor: Colors.redAccent),
       );
     }
-  }
-
-  void _showReceiptDialog({
-    required BuildContext context,
-    required String invoiceId,
-    required String paymentMode,
-    required double totalAmount,
-    required List<Map<String, dynamic>> items,
-    required KioskSettings settings,
-  }) {
-    showDialog(
-      context: context,
-      builder: (ctx) => DossierDialog(
-        title: 'Receipt #$invoiceId',
-        icon: Icons.check_circle_rounded,
-        content: Container(
-          width: 340,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFDFBF7),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                '=== ${settings.kioskName.toUpperCase()} ===\n${settings.kioskAddress}\nPhone: ${settings.kioskPhone}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold),
-              ),
-              const Text('--------------------------------', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'monospace', color: Colors.black54)),
-              Text('Invoice: $invoiceId', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
-              Text('Payment: $paymentMode', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
-              Text('Date: ${DateTime.now().toString().substring(0, 16)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11)),
-              const Text('--------------------------------', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'monospace', color: Colors.black54)),
-              ...items.map((it) => Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text('${it['title']} x${it['qty']}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11), overflow: TextOverflow.ellipsis),
-                      ),
-                      Text('${settings.currencySymbol}${(it['total'] as num).toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold)),
-                    ],
-                  )),
-              const Text('--------------------------------', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'monospace', color: Colors.black54)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('GRAND TOTAL:', style: TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 12)),
-                  Text('${settings.currencySymbol}${totalAmount.toStringAsFixed(0)}', style: const TextStyle(fontFamily: 'monospace', color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 14)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              const Center(
-                child: Text('THANK YOU FOR YOUR VISIT!', style: TextStyle(fontFamily: 'monospace', color: Colors.black54, fontSize: 10)),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          DossierButton(
-            text: 'Print 58mm Slip',
-            icon: Icons.print_rounded,
-            variant: DossierButtonVariant.primary,
-            size: DossierButtonSize.sm,
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('ESC/POS receipt sent to thermal printer!'), backgroundColor: Color(0xFF10B981)),
-              );
-            },
-          ),
-          DossierButton(
-            text: 'Done',
-            variant: DossierButtonVariant.outline,
-            size: DossierButtonSize.sm,
-            onPressed: () => Navigator.of(ctx).pop(),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -672,15 +629,16 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
           children: [
             Expanded(
               child: DossierButton(
-                text: 'Cash Pay',
+                text: 'Cash Tender',
                 icon: Icons.payments_rounded,
                 variant: DossierButtonVariant.outline,
                 customColor: const Color(0xFF10B981),
                 size: DossierButtonSize.md,
+                tooltip: 'Open Quick Touch Numpad & Return Change Calculator',
                 onPressed: subtotal == 0
                     ? null
-                    : () => _completeCheckout(
-                          paymentMode: 'CASH',
+                    : () => _openCashTenderModal(
+                          context: context,
                           totalAmount: subtotal,
                           services: services,
                           settings: settings,

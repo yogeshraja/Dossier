@@ -9,6 +9,7 @@ class CollapsibleSidebar extends StatefulWidget {
   final KioskOperator? currentOperator;
   final VoidCallback onShowOperatorMenu;
   final VoidCallback onToggleTheme;
+  final VoidCallback? onOpenCommandPalette;
   final ThemeMode currentThemeMode;
   final bool isInitiallyCollapsed;
 
@@ -19,6 +20,7 @@ class CollapsibleSidebar extends StatefulWidget {
     this.currentOperator,
     required this.onShowOperatorMenu,
     required this.onToggleTheme,
+    this.onOpenCommandPalette,
     required this.currentThemeMode,
     this.isInitiallyCollapsed = false,
   });
@@ -179,9 +181,20 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
                 ),
               ),
 
-              if (_isCollapsed)
+              if (_isCollapsed) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                  child: Center(
+                    child: IconButton(
+                      icon: const Icon(Icons.search_rounded, size: 20),
+                      tooltip: 'Quick Search & Actions (Ctrl + K)',
+                      onPressed: widget.onOpenCommandPalette,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4.0),
                   child: Center(
                     child: IconButton(
                       icon: const Icon(Icons.menu_rounded, size: 20),
@@ -191,6 +204,60 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
                     ),
                   ),
                 ),
+              ] else ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: widget.onOpenCommandPalette,
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: borderColor, width: 0.8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.search_rounded, size: 16, color: primaryColor),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Quick Search...',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                                  width: 0.6,
+                                ),
+                              ),
+                              child: Text(
+                                '⌘K',
+                                style: GoogleFonts.spaceMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
 
               // Nav Items
               Expanded(

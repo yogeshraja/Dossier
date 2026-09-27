@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/app/theme.dart';
 import 'package:dossier/data/local/initial_data.dart';
@@ -18,6 +19,7 @@ import 'package:dossier/presentation/screens/splash_screen.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 import 'package:dossier/presentation/navigation/collapsible_sidebar.dart';
+import 'package:dossier/presentation/widgets/command_palette_dialog.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -161,6 +163,15 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
     );
   }
 
+  void _openCommandPalette() {
+    CommandPaletteDialog.show(
+      context,
+      onNavigateTab: (tabIndex) {
+        setState(() => _selectedTabIndex = tabIndex);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -170,9 +181,11 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
     final authState = ref.watch(authProvider);
     final currentOperator = authState.currentOperator;
 
+    Widget body;
+
     if (isMobile) {
       // Mobile Layout with Bottom Navigation Bar
-      return Scaffold(
+      body = Scaffold(
         appBar: AppBar(
           title: Row(
             children: [
@@ -189,6 +202,11 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
             ],
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.search_rounded, size: 20),
+              tooltip: 'Quick Search & Actions',
+              onPressed: _openCommandPalette,
+            ),
             if (currentOperator != null)
               IconButton(
                 icon: CircleAvatar(
@@ -217,32 +235,45 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
             NavigationDestination(icon: Icon(Icons.people_alt_outlined), selectedIcon: Icon(Icons.people_alt_rounded), label: 'Dossiers'),
             NavigationDestination(icon: Icon(Icons.burst_mode_outlined), selectedIcon: Icon(Icons.burst_mode_rounded), label: 'Media'),
             NavigationDestination(icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale_rounded), label: 'POS'),
+            NavigationDestination(icon: Icon(Icons.analytics_outlined), selectedIcon: Icon(Icons.analytics_rounded), label: 'Register'),
             NavigationDestination(icon: Icon(Icons.cloud_sync_outlined), selectedIcon: Icon(Icons.cloud_sync_rounded), label: 'Sync'),
             NavigationDestination(icon: Icon(Icons.tune_outlined), selectedIcon: Icon(Icons.tune_rounded), label: 'Settings'),
           ],
         ),
       );
+    } else {
+      // Desktop & Tablet Navigation Rail Layout
+      body = Scaffold(
+        body: Row(
+          children: [
+            CollapsibleSidebar(
+              selectedIndex: _selectedTabIndex,
+              onDestinationSelected: (idx) => setState(() => _selectedTabIndex = idx),
+              currentOperator: currentOperator,
+              onShowOperatorMenu: () => _showOperatorMenu(context),
+              onToggleTheme: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
+              onOpenCommandPalette: _openCommandPalette,
+              currentThemeMode: settings.themeMode,
+              isInitiallyCollapsed: !isDesktop,
+            ),
+
+            // Main Workspace View with animated transitions
+            Expanded(
+              child: _buildAnimatedTabContent(_selectedTabIndex),
+            ),
+          ],
+        ),
+      );
     }
 
-    // Desktop & Tablet Navigation Rail Layout
-    return Scaffold(
-      body: Row(
-        children: [
-          CollapsibleSidebar(
-            selectedIndex: _selectedTabIndex,
-            onDestinationSelected: (idx) => setState(() => _selectedTabIndex = idx),
-            currentOperator: currentOperator,
-            onShowOperatorMenu: () => _showOperatorMenu(context),
-            onToggleTheme: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
-            currentThemeMode: settings.themeMode,
-            isInitiallyCollapsed: !isDesktop,
-          ),
-
-          // Main Workspace View with animated transitions
-          Expanded(
-            child: _buildAnimatedTabContent(_selectedTabIndex),
-          ),
-        ],
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): _openCommandPalette,
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): _openCommandPalette,
+      },
+      child: Focus(
+        autofocus: true,
+        child: body,
       ),
     );
   }
