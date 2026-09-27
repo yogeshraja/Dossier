@@ -13,6 +13,7 @@ import 'package:dossier/features/cases/widgets/attach_document_dialog.dart';
 import 'package:dossier/features/cases/widgets/exhibit_preview_dialog.dart';
 import 'package:dossier/features/billing_pos/widgets/record_payment_dialog.dart';
 import 'package:dossier/data/local/app_database.dart';
+import 'package:dossier/presentation/navigation/collapsible_sidebar.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
@@ -81,7 +82,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(CollapsibleSidebar), findsOneWidget);
     });
 
     testWidgets('KioskWorkstationHome renders on Mobile (390x844) with 0 overflows', (WidgetTester tester) async {

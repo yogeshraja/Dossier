@@ -16,6 +16,7 @@ import 'package:dossier/features/settings/screens/settings_screen.dart';
 import 'package:dossier/presentation/screens/splash_screen.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
+import 'package:dossier/presentation/navigation/collapsible_sidebar.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -226,159 +227,15 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
     return Scaffold(
       body: Row(
         children: [
-          NavigationRail(
+          CollapsibleSidebar(
             selectedIndex: _selectedTabIndex,
             onDestinationSelected: (idx) => setState(() => _selectedTabIndex = idx),
-            backgroundColor: Theme.of(context).navigationRailTheme.backgroundColor,
-            extended: isDesktop,
-            minExtendedWidth: 200,
-            leading: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(Icons.folder_shared_rounded, color: Colors.white, size: 20),
-                  ),
-                  if (isDesktop) ...[
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'DOSSIER',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.5,
-                            fontSize: 15,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        Text(
-                          'KIOSK VAULT',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
-                            fontSize: 9,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            trailing: Expanded(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Operator Chip
-                      if (currentOperator != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: InkWell(
-                            onTap: () => _showOperatorMenu(context),
-                            borderRadius: BorderRadius.circular(10),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 12,
-                                    backgroundColor: currentOperator.role.color,
-                                    child: Text(
-                                      currentOperator.initials,
-                                      style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  if (isDesktop) ...[
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        currentOperator.fullName,
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.arrow_drop_down_rounded, size: 18),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      isDesktop
-                          ? DossierButton(
-                              text: settings.themeMode == ThemeMode.dark ? 'Light Mode' : 'Dark Mode',
-                              icon: settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                              size: DossierButtonSize.sm,
-                              variant: DossierButtonVariant.outline,
-                              onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
-                            )
-                          : IconButton(
-                              onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
-                              icon: Icon(
-                                settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                                size: 20,
-                              ),
-                              tooltip: 'Toggle Theme',
-                            ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.people_alt_outlined),
-                selectedIcon: Icon(Icons.people_alt_rounded),
-                label: Text('Dossiers & Intake'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.burst_mode_outlined),
-                selectedIcon: Icon(Icons.burst_mode_rounded),
-                label: Text('Media Studio'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.point_of_sale_outlined),
-                selectedIcon: Icon(Icons.point_of_sale_rounded),
-                label: Text('POS & Billing'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.cloud_sync_outlined),
-                selectedIcon: Icon(Icons.cloud_sync_rounded),
-                label: Text('Vault Sync'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.tune_outlined),
-                selectedIcon: Icon(Icons.tune_rounded),
-                label: Text('Catalog & Settings'),
-              ),
-            ],
+            currentOperator: currentOperator,
+            onShowOperatorMenu: () => _showOperatorMenu(context),
+            onToggleTheme: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
+            currentThemeMode: settings.themeMode,
+            isInitiallyCollapsed: !isDesktop,
           ),
-          VerticalDivider(width: 1, thickness: 1, color: Theme.of(context).dividerColor),
 
           // Main Workspace View with animated transitions
           Expanded(

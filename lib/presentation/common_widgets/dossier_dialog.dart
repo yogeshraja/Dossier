@@ -61,22 +61,18 @@ class DossierDialog extends StatelessWidget {
       child: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          child: Material(
+            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
+              side: BorderSide(
                 color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                 width: 1,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
-                ),
-              ],
             ),
+            elevation: isDark ? 16 : 8,
+            shadowColor: Colors.black.withValues(alpha: isDark ? 0.6 : 0.2),
+            clipBehavior: Clip.antiAlias,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

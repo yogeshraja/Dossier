@@ -135,6 +135,7 @@ class BillingHubPane extends ConsumerWidget {
                           size: DossierButtonSize.sm,
                           variant: DossierButtonVariant.success,
                           isFullWidth: true,
+                          tooltip: 'Record received cash, UPI, or card payment towards this case',
                           onPressed: () {
                             DossierDialog.show(
                               context: context,
@@ -168,6 +169,7 @@ class BillingHubPane extends ConsumerWidget {
                           size: DossierButtonSize.sm,
                           customColor: const Color(0xFF25D366),
                           isFullWidth: true,
+                          tooltip: 'Send instant WhatsApp message that document is ready for collection',
                           onPressed: () {
                             WhatsAppNotificationService.sendReadyForPickupAlert(
                               phoneNumber: activeDossier.phoneNumber,
@@ -186,6 +188,7 @@ class BillingHubPane extends ConsumerWidget {
                           variant: DossierButtonVariant.outline,
                           customColor: Colors.amber,
                           isFullWidth: true,
+                          tooltip: 'Send WhatsApp reminder asking customer for pending documents',
                           onPressed: () {
                             WhatsAppNotificationService.sendMissingDocumentAlert(
                               phoneNumber: activeDossier.phoneNumber,
@@ -255,6 +258,7 @@ class BillingHubPane extends ConsumerWidget {
                           size: DossierButtonSize.sm,
                           customColor: const Color(0xFF0F172A),
                           isFullWidth: true,
+                          tooltip: 'Send ESC/POS receipt stream to USB/Bluetooth thermal printer',
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(

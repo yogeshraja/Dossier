@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 enum DossierButtonVariant {
@@ -27,6 +28,8 @@ class DossierButton extends StatefulWidget {
   final bool isFullWidth;
   final Color? customColor;
   final double? borderRadius;
+  final String? tooltip;
+  final bool enableRainbowHover;
 
   const DossierButton({
     super.key,
@@ -40,43 +43,92 @@ class DossierButton extends StatefulWidget {
     this.isFullWidth = false,
     this.customColor,
     this.borderRadius,
+    this.tooltip,
+    this.enableRainbowHover = true,
   });
 
   @override
   State<DossierButton> createState() => _DossierButtonState();
 }
 
-class _DossierButtonState extends State<DossierButton> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+class _DossierButtonState extends State<DossierButton> with TickerProviderStateMixin {
+  late AnimationController _pressController;
   late Animation<double> _scaleAnimation;
+  late AnimationController _rainbowController;
+  late AnimationController _hoverFadeController;
+  late Animation<double> _hoverFadeAnimation;
   bool _isHovered = false;
+
+  static const List<Color> _rainbowColors = [
+    Color(0xFF6366F1), // Indigo
+    Color(0xFF06B6D4), // Cyan
+    Color(0xFF10B981), // Emerald
+    Color(0xFFF59E0B), // Amber
+    Color(0xFFEC4899), // Pink
+    Color(0xFF8B5CF6), // Purple
+    Color(0xFF6366F1), // Seamless loop
+  ];
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _pressController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 100),
+      duration: const Duration(milliseconds: 90),
     );
     _scaleAnimation = Tween<double>(begin: 1.0, end: 0.96).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _pressController, curve: Curves.easeInOut),
+    );
+
+    _hoverFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _hoverFadeAnimation = CurvedAnimation(
+      parent: _hoverFadeController,
+      curve: Curves.easeOut,
+    );
+
+    _rainbowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
     );
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pressController.dispose();
+    _hoverFadeController.dispose();
+    _rainbowController.dispose();
     super.dispose();
+  }
+
+  void _onEnter() {
+    if (!mounted || widget.onPressed == null || widget.isLoading) return;
+    setState(() => _isHovered = true);
+    _hoverFadeController.forward();
+    if (widget.enableRainbowHover) {
+      _rainbowController.repeat();
+    }
+  }
+
+  void _onExit() {
+    if (!mounted) return;
+    setState(() => _isHovered = false);
+    _hoverFadeController.reverse();
+    if (widget.enableRainbowHover) {
+      _rainbowController.stop();
+    }
   }
 
   EdgeInsetsGeometry _getPadding() {
     switch (widget.size) {
       case DossierButtonSize.sm:
-        return const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+        return const EdgeInsets.symmetric(horizontal: 12, vertical: 7);
       case DossierButtonSize.md:
-        return const EdgeInsets.symmetric(horizontal: 18, vertical: 12);
+        return const EdgeInsets.symmetric(horizontal: 16, vertical: 10);
       case DossierButtonSize.lg:
-        return const EdgeInsets.symmetric(horizontal: 24, vertical: 16);
+        return const EdgeInsets.symmetric(horizontal: 22, vertical: 14);
     }
   }
 
@@ -96,9 +148,9 @@ class _DossierButtonState extends State<DossierButton> with SingleTickerProvider
       case DossierButtonSize.sm:
         return 14;
       case DossierButtonSize.md:
-        return 17;
+        return 16;
       case DossierButtonSize.lg:
-        return 20;
+        return 19;
     }
   }
 
@@ -123,12 +175,13 @@ class _DossierButtonState extends State<DossierButton> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final baseColor = _getBaseColor(context);
     final isDisabled = widget.onPressed == null || widget.isLoading;
+    final radius = widget.borderRadius ?? 10.0;
 
     Color bgColor;
     Color fgColor;
-    Border? border;
 
     switch (widget.variant) {
       case DossierButtonVariant.primary:
@@ -136,17 +189,18 @@ class _DossierButtonState extends State<DossierButton> with SingleTickerProvider
       case DossierButtonVariant.danger:
       case DossierButtonVariant.warning:
       case DossierButtonVariant.success:
-        bgColor = isDisabled ? baseColor.withValues(alpha: 0.4) : (_isHovered ? baseColor.withValues(alpha: 0.9) : baseColor);
+        bgColor = isDisabled
+            ? baseColor.withValues(alpha: 0.35)
+            : (_isHovered ? baseColor.withValues(alpha: 0.9) : baseColor);
         fgColor = Colors.white;
         break;
       case DossierButtonVariant.outline:
         bgColor = _isHovered ? baseColor.withValues(alpha: 0.1) : Colors.transparent;
-        fgColor = baseColor;
-        border = Border.all(color: isDisabled ? baseColor.withValues(alpha: 0.3) : baseColor, width: 1.2);
+        fgColor = isDisabled ? baseColor.withValues(alpha: 0.4) : baseColor;
         break;
       case DossierButtonVariant.ghost:
         bgColor = _isHovered ? baseColor.withValues(alpha: 0.08) : Colors.transparent;
-        fgColor = baseColor;
+        fgColor = isDisabled ? baseColor.withValues(alpha: 0.4) : baseColor;
         break;
     }
 
@@ -176,7 +230,8 @@ class _DossierButtonState extends State<DossierButton> with SingleTickerProvider
             style: TextStyle(
               color: fgColor,
               fontSize: _getFontSize(),
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
             ),
           ),
         ),
@@ -187,38 +242,127 @@ class _DossierButtonState extends State<DossierButton> with SingleTickerProvider
       ],
     );
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+    Widget buttonWidget = MouseRegion(
+      onEnter: (_) => _onEnter(),
+      onExit: (_) => _onExit(),
       cursor: isDisabled ? SystemMouseCursors.basic : SystemMouseCursors.click,
       child: GestureDetector(
-        onTapDown: isDisabled ? null : (_) => _controller.forward(),
-        onTapUp: isDisabled ? null : (_) => _controller.reverse(),
-        onTapCancel: isDisabled ? null : () => _controller.reverse(),
+        onTapDown: isDisabled ? null : (_) => _pressController.forward(),
+        onTapUp: isDisabled ? null : (_) => _pressController.reverse(),
+        onTapCancel: isDisabled ? null : () => _pressController.reverse(),
         onTap: isDisabled ? null : widget.onPressed,
         child: ScaleTransition(
           scale: _scaleAnimation,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: _getPadding(),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(widget.borderRadius ?? 10),
-              border: border,
-              boxShadow: _isHovered && !isDisabled && widget.variant == DossierButtonVariant.primary
-                  ? [
-                      BoxShadow(
-                        color: baseColor.withValues(alpha: 0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: content,
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_hoverFadeAnimation, _rainbowController]),
+            builder: (context, child) {
+              return CustomPaint(
+                foregroundPainter: (widget.enableRainbowHover && !isDisabled && _hoverFadeAnimation.value > 0.01)
+                    ? _RainbowBorderPainter(
+                        progress: _rainbowController.value,
+                        opacity: _hoverFadeAnimation.value,
+                        borderRadius: radius,
+                        borderWidth: 1.5,
+                      )
+                    : null,
+                child: Container(
+                  padding: _getPadding(),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(radius),
+                    border: (widget.variant == DossierButtonVariant.outline && (_hoverFadeAnimation.value < 0.99 || !widget.enableRainbowHover))
+                        ? Border.all(
+                            color: isDisabled
+                                ? baseColor.withValues(alpha: 0.25)
+                                : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                            width: 1,
+                          )
+                        : null,
+                    boxShadow: _isHovered && !isDisabled
+                        ? [
+                            BoxShadow(
+                              color: (widget.variant == DossierButtonVariant.primary ||
+                                      widget.variant == DossierButtonVariant.danger ||
+                                      widget.variant == DossierButtonVariant.success)
+                                  ? baseColor.withValues(alpha: 0.28)
+                                  : const Color(0xFF6366F1).withValues(alpha: 0.18),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: content,
+                ),
+              );
+            },
           ),
         ),
       ),
     );
+
+    if (widget.tooltip != null && widget.tooltip!.isNotEmpty) {
+      return Tooltip(
+        message: widget.tooltip!,
+        waitDuration: const Duration(milliseconds: 350),
+        child: buttonWidget,
+      );
+    }
+
+    return buttonWidget;
   }
 }
+
+class _RainbowBorderPainter extends CustomPainter {
+  final double progress;
+  final double opacity;
+  final double borderRadius;
+  final double borderWidth;
+
+  _RainbowBorderPainter({
+    required this.progress,
+    required this.opacity,
+    required this.borderRadius,
+    required this.borderWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (opacity <= 0.001) return;
+
+    final rect = Rect.fromLTWH(
+      borderWidth / 2,
+      borderWidth / 2,
+      size.width - borderWidth,
+      size.height - borderWidth,
+    );
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(borderRadius - borderWidth / 2));
+
+    // Linear gradient animated left to right with angle sweep
+    final angle = progress * 2 * math.pi;
+    final dx = math.cos(angle);
+    final dy = math.sin(angle);
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = borderWidth
+      ..shader = LinearGradient(
+        begin: Alignment(-dx, -dy),
+        end: Alignment(dx, dy),
+        colors: _DossierButtonState._rainbowColors
+            .map((c) => c.withValues(alpha: (c.a * opacity).clamp(0.0, 1.0)))
+            .toList(),
+      ).createShader(rect);
+
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RainbowBorderPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.opacity != opacity ||
+        oldDelegate.borderRadius != borderRadius ||
+        oldDelegate.borderWidth != borderWidth;
+  }
+}
+

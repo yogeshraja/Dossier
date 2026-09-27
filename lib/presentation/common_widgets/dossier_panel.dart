@@ -95,11 +95,11 @@ class _DossierPanelState extends State<DossierPanel> with SingleTickerProviderSt
     final bgColor = widget.backgroundColor ?? (isDark ? const Color(0xFF0F172A) : Colors.white);
     final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: bgColor,
+    return Material(
+      color: bgColor,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(widget.borderRadius),
-        border: Border.all(color: borderColor, width: 1),
+        side: BorderSide(color: borderColor, width: 1),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(

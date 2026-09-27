@@ -1,7 +1,7 @@
 # Project State & Memory: Dossier CRM & Kiosk Vault
 
 **Last Updated:** 2026-09-27  
-**Status:** End-to-End Flow & UI Overhaul Complete: Dynamic Services POS, Real Payments & SQLite Sync, Case Notes, Media Prep Direct Attachment, Refined Palette & Micro-Animations (24/24 tests passing)
+**Status:** Interactive Rainbow Button Hover Animations, Collapsible Sidebar Navigation, Google Fonts Typography, Material ListTile Fix, and 100% Tooltip Coverage (24/24 tests passing)
 
 ---
 
@@ -9,34 +9,25 @@
 - **Stack:** Flutter 3.47.x (Dart 3.13.x) targeting Windows, Android, macOS, iOS, Linux, and Web (WASM).
 - **State Management:** Riverpod 2.x with reactive Drift SQLite stream providers.
 - **Local DB:** Drift (SQLite) with cross-platform native FFI and WASM + OPFS support.
-- **Visual Design & Palette:**
+- **Visual Design & Typography:**
+  - Integrated `google_fonts` (Plus Jakarta Sans) with crisp weights, tailored line heights, and high-contrast letter spacing.
   - Refined Slate 900 / Slate 50 design system with Deep Indigo 500, Violet 500, and Emerald 500 accents.
-  - Hover micro-animations, input focus glow rings, high-contrast typography, and fluid state transitions across all panes.
-- **Zero Dummy Data Architecture:**
-  - Removed all hardcoded mock customers, cases, and operators from initial database seeders.
-  - Added `InitialDataSeeder.cleanDummyData()` to purge legacy mock data.
-  - Replaced hardcoded form strings with clean empty states prompting real operator input and first-time kiosk setup.
+- **Micro-Interactions & Animated Components:**
+  - `DossierButton`: Animated iridescent rainbow border sweep (`LinearGradient` angle sweep + fade-in on hover), press-scale micro-feedback, and built-in contextual `Tooltip`.
+  - `CollapsibleSidebar` (`lib/presentation/navigation/collapsible_sidebar.dart`): Animated collapsible sidebar (240px <-> 76px) with brand branding, active item indicator pills, operator profile card, theme mode switcher, and automatic hover tooltips in rail mode.
+  - Material Architecture Fix: Wrapped `DossierDialog`, `DossierPanel`, and `DossierCard` in root `Material` containers to eliminate ListTile ink splash assertion exceptions.
 - **POS & Billing Workflows (`lib/features/billing_pos/`):**
-  - `QuickPosScreen`: Dynamically queries Drift SQLite `activeServicesStreamProvider` with category filters (Printing, Govt Scheme, Certificate, Utility, Legal, Financial) and search. Generates real invoices into SQLite `Invoices` table with 58mm thermal receipt preview.
-  - `RecordPaymentDialog`: Custom amount, quick presets (`₹50`, `₹100`, `₹500`, `Full Due`), payment mode switching (`CASH`, `UPI`, `CARD`), and direct DB update of `Cases.advancePaid`.
-  - `BillingHubPane`: Live UPI QR code generator and trigger for payment collection.
-- **Case Management & Intake (`lib/features/cases/`):**
-  - Customer remarks & instructions panel with real-time SQLite sync.
-  - Case and Dossier deletion with confirmation dialogs.
-  - Financial overview card with direct payment collection shortcut.
-- **Attachment & Document Management Workflows:**
-  - `AttachDocumentDialog` (`lib/features/cases/widgets/attach_document_dialog.dart`): Real multi-file picker via `FilePicker` (JPG, PNG, PDF, WebP, BMP, TIFF), document slot classifier, live file size formatting, and batch database insertion.
-  - `ExhibitPreviewDialog` (`lib/features/cases/widgets/exhibit_preview_dialog.dart`): Interactive document viewer supporting image zoom/pan (`InteractiveViewer`), PDF document cards, external system file launch via `url_launcher`, and permanent deletion from SQLite.
-- **Media Prep Studio (`lib/features/media_prep/screens/media_prep_studio_screen.dart`):**
-  - Real `FilePicker` for ID Card Stitcher, DCT Quantized Compressor, and Passport Photo Grid generator.
-  - Direct 1-click attachment of processed media into the active case's exhibits in Drift SQLite.
+  - `QuickPosScreen`: Dynamically queries Drift SQLite `activeServicesStreamProvider` with category filters and search. Real invoices written to SQLite with 58mm thermal receipt preview.
+  - `RecordPaymentDialog`: Custom amount, quick presets (`₹50`, `₹100`, `₹500`, `Full Due`), payment mode switching, and direct DB update of `Cases.advancePaid`.
+  - `BillingHubPane`: Dynamic UPI QR code generator, 1-tap WhatsApp notifications, and thermal slip preview.
 - **Test Suite (`test/widget_test.dart`):**
-  - 24 comprehensive test suites verifying Splash boot sequence, multi-resolution responsiveness, component interactions, Auth flows, Attachment Dialogs, Record Payment Dialog, and Quick POS screens with zero RenderFlex overflows.
+  - 24 comprehensive test suites passing with 0 warnings / 0 analyzer issues across desktop, tablet, and mobile breakpoints.
 
 ---
 
 ## 2. Commit History
-- `[HEAD]`: `feat(ux): overhaul UI consistency, dynamic POS catalog, case notes, and direct payment workflows`
+- `[HEAD]`: `feat(ui): add rainbow hover border sweep to buttons, collapsible animated sidebar, and Google Fonts typography`
+- `[PREV]`: `feat(ux): overhaul UI consistency, dynamic POS catalog, case notes, and direct payment workflows`
 - `[PREV]`: `feat(attachments): implement real file picking, document preview, exhibit deletion, and zero-dummy-data clean state`
 - `[PREV]`: `feat(auth): add offline-first Sign-In, Sign-Up, and Quick 4-Digit PIN unlock workflow with multi-operator switching`
 - `eb7a9cc`: `fix(ui): ensure strict Material 3 compliance, fluid animation curves, and zero overflow layout across all resolutions`
