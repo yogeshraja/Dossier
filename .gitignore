@@ -8,9 +8,12 @@
 .history
 .idea/
 # Node / Backend
-backend/node_modules/
-backend/.wrangler/
-backend/dist/
+node_modules/
+**/node_modules/
+.wrangler/
+**/.wrangler/
+dist/
+**/dist/
 
 
 

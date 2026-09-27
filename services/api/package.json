@@ -5,6 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
+    "build": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "db:init:local": "wrangler d1 execute dossier-db --local --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute dossier-db --remote --file=./schema.sql"
