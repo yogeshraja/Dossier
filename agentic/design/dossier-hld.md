@@ -1,345 +1,153 @@
-```markdown
 # Master High-Level Design (HLD): Dossier CRM & Kiosk Vault
 
 ## 1. System Vision & Business Architecture
 
-**Dossier** is an offline-first, multi-platform customer record manager, point-of-sale (POS), and document processing vault tailored for internet service centers, cyber cafes, CSCs (Common Service Centres), and document typing kiosks.
+**Dossier** is an offline-first, multi-platform customer relationship manager (CRM), point-of-sale (POS), document intake studio, and secure storage vault designed specifically for internet service centers, cyber cafes, Common Service Centres (CSCs), and document processing kiosks.
 
 ### Core Value Proposition & Monetization Model
-* **Free Tier (Zero Infrastructure Cost):** Operators use **"Bring Your Own Storage" (BYO Google Drive)**. All heavy artifacts (scans, receipts, PDFs) sync to the operator’s personal Google Drive (`drive.file` scope). Gross margin to the platform: **100%**.
-* **Dossier Pro Tier (₹249 – ₹299/mo):** Operators get a **Managed Cloud Vault (Cloudflare R2 / AWS S3)** with instant 1-click cloud sync (no Google account setup required), multi-device real-time sync across 2–4 counter PCs, automated portal compression (< 200 KB), ID front/back auto-stitching, and ESC/POS thermal printing. Infrastructure cost: ~$0.20 to $0.35 per user per month (> 90% net margin).
+* **Free / BYO Storage Tier (Zero Infrastructure Cost):** Operators use **"Bring Your Own Storage" (BYO Google Drive)**. Heavy artifacts (scans, receipts, application PDFs) sync directly to the operator's Google Drive account (`drive.file` scope) with automatic folder structuring (`/Dossier_Workspace/<Customer_Phone_Name>/<Case_ID_Title>/<Exhibits>`). Gross margin to platform: **100%**.
+* **Dossier Pro Managed Tier (₹249 – ₹299/mo):** Operators access a **Managed Cloud Vault (Cloudflare R2 / AWS S3)** with presigned chunk uploads, zero egress fees, multi-counter real-time sync across 2–4 counter PCs, automated portal compression (< 200 KB), and air-gapped disaster recovery snapshot exports.
+* **Air-Gapped Local Tier:** Complete local-only operation with Drift SQLite relational persistence and `.dossier` encrypted JSON bundle export/import for fully offline government/rural kiosks.
 
 ### Target Platforms
-* **Mobile:** Android (Play Store `.aab`), iOS (App Store `.ipa`)
-* **Desktop:** Windows (MS Store `.msix` & Inno Setup `.exe`), macOS (Notarized `.dmg` / App Store `.pkg`)
+* **Desktop:** Windows (MS Store `.msix` & Inno Setup `.exe`), macOS (Notarized `.dmg`), Linux (`.tar.gz` / AppImage)
+* **Mobile & Tablets:** Android (Play Store `.aab`), iOS (App Store `.ipa`)
 * **Web:** Progressive Web App (PWA) compiled to WebAssembly (WASM + OPFS)
 
 ---
 
 ## 2. End-to-End System Architecture
 
-+-------------------------------------------------------------------------------+
-|                            DOSSIER CLIENT APPLICATION                         |
-|                 (Flutter: Android / iOS / Windows / macOS / Web-PWA)          |
-|                                                                               |
-|  +-------------------------------------------------------------------------+  |
-|  |                          Presentation Layer                             |  |
-|  |   - Mobile (<900px): Bottom Bar / Camera Scanner / Stage Stepper Chips  |  |
-|  |   - Desktop/PWA (>=900px): 3-Pane Adaptive Split (Dossiers|Cases|Hub)   |  |
-|  +-------------------------------------+-----------------------------------+  |
-|                                        |                                      |
-|  +-------------------------------------v-----------------------------------+  |
-|  |                   Specialized Subsystems & Engines                      |  |
-|  |  +---------------------+ +----------------------+ +------------------+  |  |
-|  |  | Media Prep Engine   | | Services & Estimate  | | Billing & Comms  |  |  |
-|  |  | - ID Merger (F/B)   | | - Services Catalog   | | - Dynamic UPI QR |  |  |
-|  |  | - Portal Compressor | | - Auto-Doc Checklist | | - WhatsApp Intent|  |  |
-|  |  | - 4x6 Photo Grid    | | - Margin Breakdown   | | - ESC/POS Thermal|  |  |
-|  |  +----------+----------+ +----------+-----------+ +--------+---------+  |  |
-|  +-------------|-----------------------|----------------------|------------+  |
-|                +-----------------------+----------------------+               |
-|                                        |                                      |
-|  +-------------------------------------v-----------------------------------+  |
-|  |                     State Management (Riverpod)                         |  |
-|  |       DossierState | CaseState | ServiceState | BillingState            |  |
-|  +-------------------------------------+-----------------------------------+  |
-|                                        |                                      |
-|  +-------------------------------------v-----------------------------------+  |
-|  |               Pluggable Storage Bridge & Sync Coordinator               |  |
-|  |                 (Outbox Pattern with SyncQueue Table)                   |  |
-|  +-------------------+---------------------------------+-------------------+  |
-|                      |                                 |                      |
-|  +-------------------v----------+       +--------------v-------------------+  |
-|  |  Local Storage Engine (Drift)|       | Storage Vault Connector          |  |
-|  |  (FFI: Native | WASM: Web)   |       | (Swappable Strategy Pattern)     |  |
-|  |  - Dossiers     - Services   |       +-------+------------------+-------+  |
-|  |  - Cases        - Invoices   |               |                  |          |
-|  |  - Exhibits     - SyncQueue  |               |                  |          |
-|  +------------------------------+               |                  |          |
-+-------------------------------------------------|------------------|----------+
-                                                  |                  |
-                         +------------------------+                  |
-                         |                                           |
-                         v                                           v
-+--------------------------------------------------+   +------------------------+
-|             FREE TIER: BYO GOOGLE DRIVE          |   |   PRO TIER: MANAGED    |
-| - Google Drive API v3 (Scope: drive.file)        |   |   CLOUD VAULT (S3/R2)  |
-| - Root: /Dossier_Workspace                       |   | - Cloudflare R2 / S3   |
-|   └── Customers/{Phone}_{Name}                   |   | - Zero Google OAuth    |
-|       └── Cases/{Date}_{Title}                   |   | - Signed Presigned URLs|
-|           ├── meta.json                          |   | - Multi-Counter Live   |
-|           └── Exhibits (PDF/JPG)                 |   |   Concurrency          |
-+--------------------------------------------------+   +------------------------+
+```
++-----------------------------------------------------------------------------------------+
+|                                DOSSIER CLIENT APPLICATION                               |
+|                  (Flutter: Windows / Android / macOS / iOS / Linux / Web-PWA)           |
+|                                                                                         |
+|  +-----------------------------------------------------------------------------------+  |
+|  |                            Presentation Layer & Shell                             |  |
+|  |   - Mobile (<640px): Workflow Stepper / Touch Numpad / Bottom Navigation          |  |
+|  |   - Tablet (640-1000px): Collapsible 2-Pane View / Rail Navigation                |  |
+|  |   - Desktop (>=1000px): Adaptive 3-Pane Workstation (Dossiers | Cases | Hub)      |  |
+|  |   - Global Command Palette (Ctrl+K / Cmd+K) Universal Fuzzy Search                |  |
+|  +-----------------------------------------+-----------------------------------------+  |
+|                                            |                                            |
+|  +-----------------------------------------v-----------------------------------------+  |
+|  |                    Specialized Subsystems & Domain Engines                        |  |
+|  |  +----------------------+ +-----------------------+ +--------------------------+  |  |
+|  |  | Media Prep Studio    | | POS & Billing Register| | Hardware & Comms Driver  |  |  |
+|  |  | - ID Card Stitcher   | | - Touch Tender Pad    | | - ESC/POS Raw Byte Gen   |  |  |
+|  |  | - Portal Compressor  | | - Change Calculator   | | - 58mm/80mm Thermal Slips|  |  |
+|  |  | - Passport Grid 4x6  | | - Daily Sales Audit   | | - Dynamic UPI QR (EMV)   |  |  |
+|  |  | - Pure-Dart Isolates | | - Hourly Sparklines   | | - WhatsApp Intent Alerts |  |  |
+|  |  +----------+-----------+ +-----------+-----------+ +------------+-------------+  |  |
+|  |             |                         |                          |                |  |
+|  |  +----------v-----------+ +-----------v-----------+ +------------v-------------+  |  |
+|  |  | Auth & Operator      | | Disaster Recovery     | | Services Catalog         |  |  |
+|  |  | - 4-Digit PIN Lock   | | - .dossier Snapshot   | | - Gov Scheme Portal Fees |  |  |
+|  |  | - Role Capabilities  | | - 1-Click Restore     | | - Profit Margin Split    |  |  |
+|  |  +----------------------+ +-----------------------+ +--------------------------+  |  |
+|  +-----------------------------------------+-----------------------------------------+  |
+|                                            |                                            |
+|  +-----------------------------------------v-----------------------------------------+  |
+|  |                         State Management (Riverpod 2.x)                           |  |
+|  |    AuthState | DossiersStream | ActiveCasesStream | SalesReport | SyncNotifier    |  |
+|  +-----------------------------------------+-----------------------------------------+  |
+|                                            |                                            |
+|  +-----------------------------------------v-----------------------------------------+  |
+|  |                 Pluggable Storage Bridge & Sync Coordinator                       |  |
+|  |                   (Outbox Pattern with Drift SQLite SyncQueue)                    |  |
+|  +----------------------+------------------------------------+---------------------+  |
+|                         |                                    |                        |
+|  +----------------------v--------------+       +-------------v---------------------+  |
+|  |  Local Storage Engine (Drift SQLite)|       | Pluggable Cloud Vault Connector   |  |
+|  |  - FFI Engine (Desktop/Mobile)      |       | (Swappable Storage Strategy)      |  |
+|  |  - WASM + OPFS (Web PWA)            |       +-------+-------------------+-------+  |
+|  |  - Dossiers       - Services        |               |                   |          |
+|  |  - Cases          - Invoices        |               |                   |          |
+|  |  - Exhibits       - SyncQueue       |               |                   |          |
+|  +-------------------------------------+               |                   |          |
++--------------------------------------------------------|-------------------|----------+
+                                                         |                   |
+                               +-------------------------+                   |
+                               |                                             |
+                               v                                             v
++----------------------------------------------------+   +------------------------------+
+|            TIER 1: BYO GOOGLE DRIVE                |   |    TIER 2: MANAGED CLOUDFLARE|
+|  - Google Drive REST API v3 (`drive.file` scope)   |   |            R2 CLOUD VAULT    |
+|  - Root: /Dossier_Workspace                        |   |  - Zero Egress Cost (S3 API) |
+|    └── {Customer_Phone_Name}                       |   |  - Presigned Chunk Streaming |
+|        └── {Case_ID_Title}                         |   |  - Multi-Counter Multi-PC    |
+|            ├── meta.json                           |   |    Concurrent Sync           |
+|            └── Exhibits (PDF/JPG)                  |   +------------------------------+
++----------------------------------------------------+
+```
 
 ---
 
-## 3. Storage Strategy: Pluggable Vault Connector
+## 3. Core Subsystems & Domain Modules
 
-The client abstracts file synchronization behind a unified `VaultStorageService` interface. The implementation switches based on the operator's subscription tier:
+### 3.1 Direct ESC/POS Hardware Printing & Peripheral Driver
+- **`EscPosPrinterService` (`lib/domain/services/esc_pos_printer_service.dart`)**:
+  - Generates standard ESC/POS binary byte buffers across 58mm (32 chars/line) and 80mm (48 chars/line) thermal paper formats.
+  - Implements hardware cut commands (`GS V 66 0`), cash drawer kick pulses (`ESC p 0 25 250`), dynamic text scaling, bold styling, and two-column dot-leader alignments.
+  - Generates Walk-in POS slips, Case Invoices, and End-of-Day (EOD) Register Closure reports.
+
+### 3.2 Daily Sales & Cash Reconciliation Register
+- **`DailySalesRegisterScreen` (`lib/features/billing_pos/screens/daily_sales_register_screen.dart`)**:
+  - Aggregates live invoice transactions across flexible date ranges (`TODAY`, `YESTERDAY`, `THIS_WEEK`, `THIS_MONTH`).
+  - Cash drawer audit tracking opening float, cash inflow, and counted physical cash with automated variance badges (`BALANCED`, `OVERAGE`, `SHORTAGE`).
+  - Pure-Dart **`SparklineChart`** rendering real-time cubic bezier hourly traffic curves with hover tooltip scrubbing.
+
+### 3.3 Touch POS Quick-Cash Tender Pad
+- **`QuickTenderPad` (`lib/features/billing_pos/widgets/quick_tender_pad.dart`)**:
+  - High-density 10-key touch PIN pad (`0-9`, `00`, `.`, `C`, `⌫`) for rapid counter transactions.
+  - Smart denomination chips (`Exact`, `+₹50`, `+₹100`, rounded nearest ₹50/₹100/₹500 bills).
+  - Real-time return change calculation and shortfall alert badges.
+
+### 3.4 Multi-Operator Authentication & Role Control
+- **`AuthNotifier` (`lib/features/auth/providers/auth_provider.dart`)**:
+  - 100% offline-first operator management with bcrypt-style secure password and 4-digit PIN storage.
+  - Role capabilities distinguishing `Owner / Manager` (administrative pricing, EOD closure, backup exports) and `Operator` (counter sales, case intake, media processing).
+  - Rapid operator switching directly accessible via the top bar and sidebar profile card.
+
+### 3.5 Global Command Palette & Quick Search
+- **`CommandPaletteDialog` (`lib/presentation/widgets/command_palette_dialog.dart`)**:
+  - App-wide keyboard shortcut (`Ctrl + K` / `Cmd + K`) for instant keyboard-driven counter operations.
+  - Fuzzy indexing across customer records, active cases, POS services, navigation targets, and theme modes.
+  - Up/Down arrow selection, Enter to execute, and Escape to dismiss.
+
+### 3.6 Media Prep Studio (Pure-Dart Background Isolates)
+- **`MediaPrepService` (`lib/domain/services/media_prep_service.dart`)**:
+  - ID Card Stitcher: Merges front and back scans vertically or horizontally with customizable border padding and background canvas.
+  - Portal Compressor: Dynamic DCT quantization binary search compressing heavy PDFs and images below portal size limits (e.g. < 200 KB or < 50 KB).
+  - Passport Photo Grid: Pure-Dart 4x6 inch / A4 photo sheet generator with 8, 16, or 32 grid layouts for thermal/inkjet photo printers.
+
+### 3.7 Pluggable Cloud Vault & Air-Gapped Disaster Recovery
+- **`GoogleDriveVaultService`**: BYO Google Drive OAuth2 integration with automatic workspace hierarchy creation and file streaming.
+- **`ManagedR2VaultService`**: Presigned S3 chunk streaming to Cloudflare R2 with zero egress fees.
+- **`BackupRestoreService`**: Portable `.dossier` JSON bundle serialization and full SQLite transaction restore for air-gapped rural centers.
+
+---
+
+## 4. Complete Database Schema (Drift SQLite)
 
 ```dart
-abstract class VaultStorageService {
-  Future<String> createCustomerFolder(String folderName);
-  Future<String> createCaseFolder(String parentFolderId, String caseTitle);
-  Future<String> uploadExhibit({
-    required String parentFolderId,
-    required String fileName,
-    required String mimeType,
-    required Stream<List<int>> dataStream,
-    required int length,
-  });
-  Future<Uri> getDirectViewUri(String remoteFileId);
-}
-
-```
-
-* **`GoogleDriveVaultService` (Free Tier):** Executes direct Google Drive v3 REST calls using the user’s authenticated OAuth token. Runs chunked resumable uploads directly to the user's `ServiceCenter_CRM` folder tree.
-* **`ManagedR2VaultService` (Pro Tier):** Obtains short-lived presigned upload URLs from the Dossier backend API and streams files straight to Cloudflare R2 ($0 egress fees, multi-counter write locking).
-
----
-
-## 4. Complete Relational Database Schema (Drift SQLite)
-
-```dart
-import 'package:drift/drift.dart';
-
-// --- CUSTOMERS / PROFILES ---
-class Dossiers extends Table {
-  TextColumn get id => text()(); // UUID v4
-  TextColumn get fullName => text().withLength(min: 1, max: 120)();
-  TextColumn get phoneNumber => text().withLength(min: 10, max: 15)();
-  TextColumn get email => text().nullable()();
-  TextColumn get notes => text().nullable()();
-  TextColumn get remoteFolderId => text().nullable()(); // Drive folder ID or R2 bucket prefix
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-// --- SERVICES MASTER CATALOG ---
-class Services extends Table {
-  TextColumn get id => text()(); // UUID v4
-  TextColumn get category => text()(); // GOVT_SCHEME, PRINTING, CERTIFICATE, UTILITY
-  TextColumn get name => text().withLength(min: 1, max: 150)();
-  RealColumn get defaultPortalFee => real().withDefault(const Constant(0.0))(); // Pass-through cost
-  RealColumn get defaultServiceFee => real().withDefault(const Constant(0.0))(); // Kiosk profit
-  TextColumn get requiredDocsJson => text().withDefault(const Constant('[]'))(); // ['AADHAAR', 'PHOTO']
-  BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-// --- JOBS / CASES ---
-class Cases extends Table {
-  TextColumn get id => text()(); // UUID v4
-  TextColumn get dossierId => text().references(Dossiers, #id)();
-  TextColumn get title => text().withLength(min: 1, max: 200)();
-  TextColumn get stage => text()(); // DRAFT, DOCS_PENDING, READY_TO_APPLY, SUBMITTED, READY_FOR_PICKUP, CLOSED
-  RealColumn get totalPortalFee => real().withDefault(const Constant(0.0))();
-  RealColumn get totalServiceFee => real().withDefault(const Constant(0.0))();
-  RealColumn get totalEstimatedAmount => real().withDefault(const Constant(0.0))();
-  RealColumn get advancePaid => real().withDefault(const Constant(0.0))();
-  TextColumn get paymentStatus => text()(); // UNPAID, PARTIALLY_PAID, PAID
-  TextColumn get remoteFolderId => text().nullable()();
-  DateTimeColumn get targetDate => dateTime().nullable()();
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-// --- CASE SERVICES (LINE ITEMS PER CASE) ---
-class CaseServices extends Table {
-  TextColumn get id => text()();
-  TextColumn get caseId => text().references(Cases, #id)();
-  TextColumn get serviceId => text().references(Services, #id)();
-  RealColumn get appliedPortalFee => real()();
-  RealColumn get appliedServiceFee => real()();
-  IntColumn get quantity => integer().withDefault(const Constant(1))();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-// --- ARTIFACTS / EXHIBITS ---
-class Exhibits extends Table {
-  TextColumn get id => text()();
-  TextColumn get caseId => text().references(Cases, #id)();
-  TextColumn get slotType => text()(); // AADHAAR_FRONT, PHOTO, SIGNATURE, ACK_RECEIPT, CUSTOM
-  TextColumn get fileName => text()();
-  TextColumn get mimeType => text()();
-  TextColumn get localPath => text().nullable()(); // Nullable on web PWA
-  TextColumn get remoteFileId => text().nullable()();
-  IntColumn get fileSizeBytes => integer()();
-  BoolColumn get isStitched => boolean().withDefault(const Constant(false))();
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-// --- BILLING: INVOICES & QUICK POS ---
-class Invoices extends Table {
-  TextColumn get id => text()();
-  TextColumn get invoiceNumber => text().unique()(); // e.g., INV-2026-0042
-  TextColumn get dossierId => text().nullable().references(Dossiers, #id)();
-  TextColumn get caseId => text().nullable().references(Cases, #id)();
-  TextColumn get invoiceType => text()(); // WALK_IN_POS, CASE_INVOICE
-  RealColumn get subtotal => real()();
-  RealColumn get discount => real().withDefault(const Constant(0.0))();
-  RealColumn get grandTotal => real()();
-  RealColumn get amountPaid => real().withDefault(const Constant(0.0))();
-  TextColumn get paymentStatus => text()(); // UNPAID, PARTIAL, PAID
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-// --- CASH DRAWER & UPI LEDGER ---
-class LedgerEntries extends Table {
-  TextColumn get id => text()();
-  TextColumn get invoiceId => text().references(Invoices, #id)();
-  RealColumn get amount => real()();
-  TextColumn get paymentMode => text()(); // CASH, UPI
-  TextColumn get transactionRef => text().nullable()(); // UPI UTR or Cash note
-  DateTimeColumn get recordedAt => dateTime().withDefault(currentDateAndTime)();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
-// --- RESILIENT OUTBOX SYNC QUEUE ---
-class SyncQueue extends Table {
-  IntColumn get queueId => integer().autoIncrement()();
-  TextColumn get entityType => text()(); // DOSSIER, CASE, EXHIBIT, INVOICE
-  TextColumn get entityId => text()();
-  TextColumn get operation => text()(); // CREATE, UPDATE, DELETE
-  TextColumn get payloadJson => text()();
-  TextColumn get syncStatus => text()(); // PENDING, PROCESSING, FAILED, SUCCESS
-  IntColumn get retryCount => integer().withDefault(const Constant(0))();
-  DateTimeColumn get scheduledAt => dateTime().withDefault(currentDateAndTime)();
-}
-
+// Schema Tables declared in lib/data/local/tables/schema.dart:
+// 1. Dossiers (Customers/Clients)
+// 2. Cases (Jobs & Applications)
+// 3. Services (Service Catalog & Portal Fees)
+// 4. CaseServices (Case Line Items)
+// 5. Exhibits (Attached Documents, Scans & Output Artifacts)
+// 6. Invoices (POS & Case Billing Records)
+// 7. LedgerEntries (Financial Double-Entry Audit Trail)
+// 8. SyncQueue (Outbox Mutation Pattern)
 ```
 
 ---
 
-## 5. Subsystems & Operational Utilities
-
-### 5.1 Media Prep Studio
-
-* **Front & Back ID Card Stitcher:** Merges two photo captures onto an A4 or standard ID canvas with automatic border alignment and center folding guides.
-* **Target Size Compressor:** Enforces government portal upload bounds (< 200 KB or < 50 KB) using adaptive DCT quantization and resolution downsampling.
-* **Passport Photo Studio:** Crops a portrait shot to 35 x 45 mm and tiles 6, 8, or 12 copies on a 4 x 6 inch or A4 photo sheet with cutting markers.
-
-### 5.2 Services Catalog & Auto-Checklist Engine
-
-* When creating a case, the operator checks off services (e.g., *Fresh PAN Card* + *2 Xerox*).
-* **Consolidated Document Checklist:** Computes the mathematical union of required documents.
-* **Margin Engine:** Computes pass-through government costs vs. net counter profit margin.
-* **Document Reuse:** Automatically links past verified exhibits from the customer’s Dossier to the new case without re-scanning.
-
-### 5.3 Billing, Hardware & Comms Engine
-
-* **Dynamic UPI QR Code Generator:** Uses `qr_flutter` to render standard UPI payment links on counter screens or receipt footers.
-* **ESC/POS Thermal Printing:** Emits raw ESC/POS byte streams to USB, Bluetooth, or Network receipt printers (58mm/80mm) for 1-second physical receipts.
-* **Zero-Cost WhatsApp Intents:** Uses `url_launcher` with pre-filled templates for pickup alerts, balance reminders, and missing document requests without WhatsApp Business API costs.
-
----
-
-## 6. End-to-End Operational Workflow
-
-[Customer Walks In]
-│
-▼
-[Operator Enters Phone Number]
-│
-├── Dossier Found ──> Load verified documents from past cases
-└── Dossier New   ──> Quick Add: Name + Phone (Local DB commit < 10ms)
-│
-▼
-[New Case: Select Services]
-(e.g., PAN Card Application + 2 Xerox + 1 Lamination)
-│
-▼
-[System Auto-Generates Intake]
-├── Itemized Estimate calculated: ₹236 (Portal: ₹107 | Shop: ₹129)
-├── Merged Document Checklist created: [Aadhaar, Photo, Signature]
-└── Advance logged (e.g., ₹100 via UPI) -> Print 58mm Thermal Slip
-│
-▼
-[Document Ingestion Step]
-├── Front/Back ID Stitcher merges Aadhaar to 1 page
-├── Portal Compressor downsamples output to < 200 KB
-└── Missing Doc? ──> 1-Tap WhatsApp Ping to customer
-│
-▼
-[Gov Portal Submission & Ack]
-└── Operator enters application number & attaches final Ack slip
-│
-▼
-[Customer Returns for Pickup]
-├── 1-Click Batch Print to counter printer
-├── Counter screen displays Dynamic UPI QR for remaining balance (₹136)
-└── Payment logged -> Case marked CLOSED
-│
-▼
-[Asynchronous Vault Replication Engine]
-└── SyncQueue streams exhibits to Google Drive (Free) or R2 Vault (Pro)
-
----
-
-## 7. Multi-Platform Distribution Architecture
-
-| Target | Build Tooling | Distribution Method | Unique Consideration |
-| --- | --- | --- | --- |
-| **Android** | `flutter build appbundle` | Google Play Store (`.aab`) | Bluetooth & Camera runtime permissions. |
-| **iOS** | `flutter build ipa` | Apple App Store | Sign in with Apple required alongside Google OAuth. |
-| **Windows** | `flutter build windows` | Microsoft Store (`.msix`) / Inno Setup (`.exe`) | Direct Win32 USB thermal printer & spool access. |
-| **macOS** | `flutter build macos` | Direct Notarized `.dmg` / Mac App Store | Hardened runtime and Apple Notarization ticket. |
-| **Web (PWA)** | `flutter build web --wasm` | Static Hosting (Cloudflare Pages / Firebase) | Requires `COOP: same-origin` and `COEP: require-corp` headers for WASM SQLite. |
-
----
-
-## 8. Phased Engineering Milestones
-
-+-------------------------------------------------------------------------+
-| Milestone 1: Multi-Platform Core & Pluggable Storage                    |
-| - Drift SQLite setup (Conditional FFI / WASM loaders)                   |
-| - Dossiers, Cases, Services, Exhibits, and SyncQueue tables             |
-| - Google Drive OAuth (Free) & S3/R2 Presigned Uploader (Pro)            |
-+-------------------------------------------------------------------------+
-│
-▼
-+-------------------------------------------------------------------------+
-| Milestone 2: Services Catalog, Checklists & Media Prep                  |
-| - Services master configuration screen with custom pricing              |
-| - Case intake stepper with auto-merged document checklists              |
-| - ID Front/Back merger, < 200 KB compressor, 4x6 passport photo grid    |
-+-------------------------------------------------------------------------+
-│
-▼
-+-------------------------------------------------------------------------+
-| Milestone 3: Billing, POS & Hardware Integration                        |
-| - Walk-in POS quick-sale grid for cash transactions                     |
-| - Dynamic UPI QR generator & ESC/POS 58mm/80mm receipt driver           |
-| - WhatsApp pre-filled template launcher via native deep link            |
-+-------------------------------------------------------------------------+
-│
-▼
-+-------------------------------------------------------------------------+
-| Milestone 4: Platform Packaging & Production Hardening                  |
-| - Windows .msix / Inno Setup installer compilation                      |
-| - Android Play Console & Apple App Store review bundles                 |
-| - Static Web PWA deployment with OPFS multithreading headers            |
-+-------------------------------------------------------------------------+
-
-```
-
-```
+## 5. UI/UX Design System Standards
+- **Typography:** Google Fonts `Plus Jakarta Sans` for UI, `Space Mono` for receipts and tabular numbers.
+- **OpenType Tabular Figures:** Mandatory `FontFeature.tabularFigures()` applied globally to align financial columns.
+- **Glassmorphism:** `AppThemes.glassDecoration()` and `DossierCardVariant.glass` with `BackdropFilter` and inner bevel borders.
+- **Micro-Animations:** Iridescent rainbow hover border sweeps, smooth collapsible sidebar (240px <-> 76px), and paper-feed receipt rollouts.
+- **Responsiveness:** Strict 0-RenderFlex-overflow mandate supporting 320px mobile viewports up to 1440px+ multi-pane workstations.
