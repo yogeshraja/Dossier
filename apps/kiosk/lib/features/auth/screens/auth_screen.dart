@@ -187,7 +187,90 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
   }
 
-  void _showAddOperatorDialog() {
+  void _promptAdminAuthorizationThenAddOperator() {
+    final adminOp = ref.read(authProvider).adminOperator;
+    final adminPin = adminOp?.pin ?? '1234';
+    final pinCtrl = TextEditingController();
+    String? authError;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => DossierDialog(
+          title: 'Admin Authorization Required',
+          icon: Icons.shield_rounded,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Only the Kiosk Administrator (${adminOp?.fullName ?? "Owner"}) can add desk operators. Please enter the Master Admin PIN.',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                if (authError != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 14),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            authError!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                DossierInputField(
+                  key: const ValueKey('admin_auth_pin_field'),
+                  label: 'Master Admin 4-Digit PIN',
+                  hintText: '****',
+                  controller: pinCtrl,
+                  obscureText: true,
+                  prefixIcon: const Icon(Icons.lock_person_rounded, size: 18),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            DossierButton(
+              text: 'Verify Admin',
+              icon: Icons.verified_user_rounded,
+              onPressed: () {
+                if (pinCtrl.text.trim() == adminPin) {
+                  final verifiedPin = pinCtrl.text.trim();
+                  Navigator.pop(ctx);
+                  _showAddOperatorDialog(verifiedAdminPin: verifiedPin);
+                } else {
+                  setDialogState(() {
+                    authError = 'Incorrect Admin PIN. Only Admin can add operators.';
+                  });
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddOperatorDialog({String? verifiedAdminPin}) {
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -279,6 +362,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       role: _newOpRole,
                       phone: _newOpPhoneCtrl.text.isNotEmpty ? _newOpPhoneCtrl.text : null,
                       email: _newOpEmailCtrl.text.isNotEmpty ? _newOpEmailCtrl.text : null,
+                      adminPin: verifiedAdminPin,
                     );
                 if (success && ctx.mounted) {
                   _newOpNameCtrl.clear();
@@ -948,7 +1032,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
               const SizedBox(width: 8),
               TextButton.icon(
-                onPressed: _showAddOperatorDialog,
+                onPressed: _promptAdminAuthorizationThenAddOperator,
                 icon: const Icon(Icons.add_rounded, size: 16),
                 label: const Text('Add Operator', style: TextStyle(fontSize: 12)),
               ),

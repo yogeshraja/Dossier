@@ -347,14 +347,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Provision a new desk operator
+  /// Provision a new desk operator (Admin only)
   Future<bool> addOperator({
     required String name,
     required String pin,
     OperatorRole role = OperatorRole.operator,
     String? phone,
     String? email,
+    String? adminPin,
   }) async {
+    // 1. Verify admin authorization
+    final isAdmin = state.currentOperator?.role == OperatorRole.admin || state.user?.role == 'admin';
+    if (!isAdmin) {
+      final inputAdminPin = adminPin?.trim() ?? '';
+      final expectedPin = state.adminOperator?.pin ?? '1234';
+      if (inputAdminPin.isEmpty || inputAdminPin != expectedPin) {
+        state = state.copyWith(
+          errorMessage: 'Unauthorized: Only the Kiosk Admin can add operators.',
+        );
+        return false;
+      }
+    }
+
     state = state.copyWith(isLoading: true, clearErrorMessage: true);
 
     final cleanName = name.trim();
@@ -396,6 +410,100 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       return false;
     }
+  }
+
+  /// Update an operator's profile (name, phone, email, role, pin)
+  Future<bool> updateOperatorProfile({
+    required String operatorId,
+    String? fullName,
+    String? phone,
+    String? email,
+    String? newPin,
+    OperatorRole? role,
+  }) async {
+    final cleanName = fullName?.trim();
+    final cleanPhone = phone?.trim();
+    final cleanEmail = email?.trim();
+    final cleanPin = newPin?.trim();
+
+    final opIndex = state.registeredOperators.indexWhere((o) => o.id == operatorId);
+    if (opIndex == -1) {
+      return false;
+    }
+
+    final oldOp = state.registeredOperators[opIndex];
+    final updatedOp = oldOp.copyWith(
+      fullName: cleanName?.isNotEmpty == true ? cleanName : oldOp.fullName,
+      phone: cleanPhone?.isNotEmpty == true ? cleanPhone : oldOp.phone,
+      email: cleanEmail?.isNotEmpty == true ? cleanEmail : oldOp.email,
+      pin: cleanPin?.isNotEmpty == true && cleanPin!.length == 4 ? cleanPin : oldOp.pin,
+      role: role ?? oldOp.role,
+    );
+
+    final updatedList = List<KioskOperator>.from(state.registeredOperators);
+    updatedList[opIndex] = updatedOp;
+
+    final isCurrent = state.currentOperator?.id == operatorId;
+    final isAdmin = state.adminOperator?.id == operatorId;
+
+    state = state.copyWith(
+      registeredOperators: updatedList,
+      currentOperator: isCurrent ? updatedOp : state.currentOperator,
+      adminOperator: isAdmin ? updatedOp : state.adminOperator,
+      clearErrorMessage: true,
+    );
+
+    return true;
+  }
+
+  /// Change quick 4-digit PIN for an operator
+  Future<bool> changeOperatorPin({
+    required String operatorId,
+    required String currentPin,
+    required String newPin,
+  }) async {
+    final cleanCur = currentPin.trim();
+    final cleanNew = newPin.trim();
+
+    if (cleanNew.length != 4) {
+      state = state.copyWith(errorMessage: 'New PIN must be exactly 4 digits.');
+      return false;
+    }
+
+    final op = state.registeredOperators.firstWhere(
+      (o) => o.id == operatorId,
+      orElse: () => state.currentOperator ?? state.registeredOperators.first,
+    );
+
+    if (op.pin != cleanCur) {
+      state = state.copyWith(errorMessage: 'Current PIN is incorrect.');
+      return false;
+    }
+
+    return updateOperatorProfile(operatorId: operatorId, newPin: cleanNew);
+  }
+
+  /// Delete / Remove a desk operator (Admin only)
+  Future<bool> deleteOperator({
+    required String operatorId,
+  }) async {
+    final isAdmin = state.currentOperator?.role == OperatorRole.admin || state.user?.role == 'admin';
+    if (!isAdmin) {
+      state = state.copyWith(errorMessage: 'Unauthorized: Only administrators can remove operators.');
+      return false;
+    }
+
+    if (state.adminOperator?.id == operatorId) {
+      state = state.copyWith(errorMessage: 'Cannot delete the master admin operator.');
+      return false;
+    }
+
+    final updatedList = state.registeredOperators.where((o) => o.id != operatorId).toList();
+    state = state.copyWith(
+      registeredOperators: updatedList,
+      clearErrorMessage: true,
+    );
+    return true;
   }
 
   /// Operator Shift Login (Select Operator + Enter 4-digit PIN)

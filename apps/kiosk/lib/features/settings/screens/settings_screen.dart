@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:dossier/features/auth/models/operator_model.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
 import 'package:dossier/features/auth/screens/auth_screen.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
@@ -21,10 +23,35 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  // Kiosk Profile Controllers
   final _kioskNameCtrl = TextEditingController();
   final _kioskPhoneCtrl = TextEditingController();
   final _kioskAddressCtrl = TextEditingController();
   final _upiVpaCtrl = TextEditingController();
+
+  // User Profile Controllers
+  final _userFullNameCtrl = TextEditingController();
+  final _userPhoneCtrl = TextEditingController();
+  final _userEmailCtrl = TextEditingController();
+
+  // Change PIN Controllers
+  final _currentPinCtrl = TextEditingController();
+  final _newPinCtrl = TextEditingController();
+  final _confirmPinCtrl = TextEditingController();
+
+  // New Operator Dialog State
+  final _newOpNameCtrl = TextEditingController();
+  final _newOpPinCtrl = TextEditingController();
+  final _newOpPhoneCtrl = TextEditingController();
+  final _newOpEmailCtrl = TextEditingController();
+  OperatorRole _newOpRole = OperatorRole.operator;
+
+  // Workplace preference state
+  bool _includeOperatorOnReceipt = true;
+  bool _autoCutReceipt = true;
+  String _receiptPaperWidth = '80mm';
+  bool _soundFeedback = true;
 
   static const _categoryLabels = {
     'GOVT_SCHEME': 'Govt Schemes',
@@ -48,12 +75,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
+
     final settings = ref.read(kioskSettingsProvider);
     _kioskNameCtrl.text = settings.kioskName;
     _kioskPhoneCtrl.text = settings.kioskPhone;
     _kioskAddressCtrl.text = settings.kioskAddress;
     _upiVpaCtrl.text = settings.merchantUpiVpa;
+
+    final auth = ref.read(authProvider);
+    final curOp = auth.currentOperator;
+    if (curOp != null) {
+      _userFullNameCtrl.text = curOp.fullName;
+      _userPhoneCtrl.text = curOp.phone;
+      _userEmailCtrl.text = curOp.email ?? '';
+    }
   }
 
   @override
@@ -63,10 +99,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     _kioskPhoneCtrl.dispose();
     _kioskAddressCtrl.dispose();
     _upiVpaCtrl.dispose();
+    _userFullNameCtrl.dispose();
+    _userPhoneCtrl.dispose();
+    _userEmailCtrl.dispose();
+    _currentPinCtrl.dispose();
+    _newPinCtrl.dispose();
+    _confirmPinCtrl.dispose();
+    _newOpNameCtrl.dispose();
+    _newOpPinCtrl.dispose();
+    _newOpPhoneCtrl.dispose();
+    _newOpEmailCtrl.dispose();
     super.dispose();
   }
 
   void _saveKioskProfile() {
+    final auth = ref.read(authProvider);
+    final isAdmin = auth.currentOperator?.role == OperatorRole.admin || auth.user?.role == 'admin';
+    if (!isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unauthorized: Only Kiosk Admins can modify center identity.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     ref.read(kioskSettingsProvider.notifier).updateKioskInfo(
           name: _kioskNameCtrl.text.trim(),
           address: _kioskAddressCtrl.text.trim(),
@@ -74,20 +132,294 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
           upiVpa: _upiVpaCtrl.text.trim(),
         );
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Kiosk Profile & Receipt Headers updated!'), backgroundColor: Color(0xFF10B981)),
+      const SnackBar(
+        content: Text('Kiosk Profile & Receipt Headers updated!'),
+        backgroundColor: Color(0xFF10B981),
+      ),
+    );
+  }
+
+  Future<void> _saveUserProfile() async {
+    final curOp = ref.read(authProvider).currentOperator;
+    if (curOp == null) return;
+
+    final success = await ref.read(authProvider.notifier).updateOperatorProfile(
+          operatorId: curOp.id,
+          fullName: _userFullNameCtrl.text.trim(),
+          phone: _userPhoneCtrl.text.trim(),
+          email: _userEmailCtrl.text.trim().isNotEmpty ? _userEmailCtrl.text.trim() : null,
+        );
+
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Operator profile successfully updated!'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update operator profile.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleChangePin() async {
+    final curOp = ref.read(authProvider).currentOperator;
+    if (curOp == null) return;
+
+    if (_newPinCtrl.text.trim() != _confirmPinCtrl.text.trim()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('New PIN and Confirm PIN do not match.'), backgroundColor: Colors.redAccent),
+      );
+      return;
+    }
+
+    final success = await ref.read(authProvider.notifier).changeOperatorPin(
+          operatorId: curOp.id,
+          currentPin: _currentPinCtrl.text.trim(),
+          newPin: _newPinCtrl.text.trim(),
+        );
+
+    if (mounted) {
+      if (success) {
+        _currentPinCtrl.clear();
+        _newPinCtrl.clear();
+        _confirmPinCtrl.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('4-Digit PIN successfully changed!'), backgroundColor: Color(0xFF10B981)),
+        );
+      } else {
+        final err = ref.read(authProvider).errorMessage ?? 'Failed to change PIN.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  void _showAddOperatorDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => DossierDialog(
+          title: 'Provision New Desk Operator',
+          icon: Icons.person_add_alt_1_rounded,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Created operators are synchronized with the server and cached locally for rapid shift logins.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                DossierInputField(
+                  key: const ValueKey('admin_new_op_name'),
+                  label: 'Operator Full Name',
+                  hintText: 'e.g. Ramesh Kumar',
+                  controller: _newOpNameCtrl,
+                  prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DossierInputField(
+                        key: const ValueKey('admin_new_op_pin'),
+                        label: '4-Digit PIN',
+                        hintText: '****',
+                        controller: _newOpPinCtrl,
+                        prefixIcon: const Icon(Icons.pin_rounded, size: 18),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Role', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          DropdownButtonFormField<OperatorRole>(
+                            initialValue: _newOpRole,
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            items: OperatorRole.values.map((r) {
+                              return DropdownMenuItem(value: r, child: Text(r.label, style: const TextStyle(fontSize: 12)));
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() => _newOpRole = val);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DossierInputField(
+                  key: const ValueKey('admin_new_op_phone'),
+                  label: 'Mobile Number (Optional)',
+                  hintText: '9876543210',
+                  controller: _newOpPhoneCtrl,
+                  prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                  keyboardType: TextInputType.phone,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            DossierButton(
+              text: 'Create Operator',
+              icon: Icons.check_circle_rounded,
+              onPressed: () async {
+                final success = await ref.read(authProvider.notifier).addOperator(
+                      name: _newOpNameCtrl.text,
+                      pin: _newOpPinCtrl.text,
+                      role: _newOpRole,
+                      phone: _newOpPhoneCtrl.text.isNotEmpty ? _newOpPhoneCtrl.text : null,
+                      email: _newOpEmailCtrl.text.isNotEmpty ? _newOpEmailCtrl.text : null,
+                    );
+                if (success && ctx.mounted) {
+                  _newOpNameCtrl.clear();
+                  _newOpPinCtrl.clear();
+                  _newOpPhoneCtrl.clear();
+                  _newOpEmailCtrl.clear();
+                  Navigator.pop(ctx);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditOperatorDialog(KioskOperator op) {
+    final nameCtrl = TextEditingController(text: op.fullName);
+    final phoneCtrl = TextEditingController(text: op.phone);
+    final pinCtrl = TextEditingController(text: op.pin);
+    OperatorRole role = op.role;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => DossierDialog(
+          title: 'Edit Operator: ${op.fullName}',
+          icon: Icons.edit_rounded,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DossierInputField(
+                  label: 'Full Name',
+                  controller: nameCtrl,
+                  prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DossierInputField(
+                        label: '4-Digit PIN',
+                        controller: pinCtrl,
+                        prefixIcon: const Icon(Icons.pin_rounded, size: 18),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Role', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          DropdownButtonFormField<OperatorRole>(
+                            initialValue: role,
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            items: OperatorRole.values.map((r) {
+                              return DropdownMenuItem(value: r, child: Text(r.label, style: const TextStyle(fontSize: 12)));
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() => role = val);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DossierInputField(
+                  label: 'Mobile Number',
+                  controller: phoneCtrl,
+                  prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                  keyboardType: TextInputType.phone,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            DossierButton(
+              text: 'Save Changes',
+              icon: Icons.save_rounded,
+              onPressed: () async {
+                final success = await ref.read(authProvider.notifier).updateOperatorProfile(
+                      operatorId: op.id,
+                      fullName: nameCtrl.text.trim(),
+                      phone: phoneCtrl.text.trim(),
+                      newPin: pinCtrl.text.trim(),
+                      role: role,
+                    );
+                if (success && ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(kioskSettingsProvider);
+    final authState = ref.watch(authProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(
         children: [
-          // Header
+          // Header & Tab Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -96,7 +428,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final isCompact = constraints.maxWidth < 750;
+                final isCompact = constraints.maxWidth < 950;
 
                 if (isCompact) {
                   return Column(
@@ -115,7 +447,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                           const SizedBox(width: 10),
                           const Expanded(
                             child: Text(
-                              'Catalog & Settings',
+                              'Settings & User Profile',
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -131,9 +463,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                         labelColor: Theme.of(context).colorScheme.primary,
                         unselectedLabelColor: Colors.grey,
                         tabs: const [
-                          Tab(text: 'Services Catalog'),
+                          Tab(text: 'My Profile'),
+                          Tab(text: 'Catalog'),
                           Tab(text: 'Currency & Theme'),
-                          Tab(text: 'Kiosk Identity & QR'),
+                          Tab(text: 'Kiosk Identity'),
+                          Tab(text: 'Team & Operators'),
                         ],
                       ),
                     ],
@@ -155,11 +489,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Catalog Customization & Kiosk Settings',
+                          Text('Workstation Settings & Profile Hub',
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
                               overflow: TextOverflow.ellipsis),
                           const SizedBox(height: 2),
-                          const Text('Configure service fee breakups, document checklists, currency, and themes',
+                          const Text('Personal operator profiles, catalog pricing, team administration, and hardware defaults',
                               style: TextStyle(fontSize: 11, color: Colors.grey),
                               overflow: TextOverflow.ellipsis),
                         ],
@@ -167,16 +501,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                     ),
                     const SizedBox(width: 16),
                     SizedBox(
-                      width: 440,
+                      width: 600,
                       child: TabBar(
                         controller: _tabController,
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.start,
                         indicatorColor: Theme.of(context).colorScheme.primary,
                         labelColor: Theme.of(context).colorScheme.primary,
                         unselectedLabelColor: Colors.grey,
                         tabs: const [
+                          Tab(icon: Icon(Icons.person_rounded, size: 15), text: 'My Profile'),
                           Tab(icon: Icon(Icons.format_list_bulleted_rounded, size: 15), text: 'Services Catalog'),
-                          Tab(icon: Icon(Icons.currency_exchange_rounded, size: 15), text: 'Currency & Theme'),
-                          Tab(icon: Icon(Icons.storefront_rounded, size: 15), text: 'Kiosk Profile & QR'),
+                          Tab(icon: Icon(Icons.palette_rounded, size: 15), text: 'Appearance'),
+                          Tab(icon: Icon(Icons.storefront_rounded, size: 15), text: 'Kiosk Profile'),
+                          Tab(icon: Icon(Icons.badge_rounded, size: 15), text: 'Team & Operators'),
                         ],
                       ),
                     ),
@@ -186,14 +524,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
             ),
           ),
 
-          // Tab Views
+          // Tab Content
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: [
+                _buildUserProfileTab(authState, isDark),
                 _buildServicesCatalogTab(settings, isDark),
                 _buildCurrencyThemeTab(settings, isDark),
-                _buildKioskProfileTab(settings, isDark),
+                _buildKioskProfileTab(settings, authState, isDark),
+                _buildTeamManagementTab(authState, isDark),
               ],
             ),
           ),
@@ -202,7 +542,347 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     );
   }
 
-  // --- Tab 1: Services Catalog & Opt-ins ---
+  // ─────────────────────────────────────────────────────────────
+  // Tab 1: Dedicated User Profile & Settings Page for Each Operator
+  // ─────────────────────────────────────────────────────────────
+  Widget _buildUserProfileTab(AuthState auth, bool isDark) {
+    final curOp = auth.currentOperator ?? auth.adminOperator;
+    final user = auth.user;
+
+    if (curOp == null) {
+      return const Center(child: Text('No active operator logged in.'));
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Operator Identity & Status Card
+          DossierCard(
+            variant: DossierCardVariant.glass,
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: curOp.role.color,
+                          child: Text(
+                            curOp.initials,
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  curOp.fullName,
+                                  style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(width: 8),
+                                DossierBadge(
+                                  label: curOp.role.label,
+                                  variant: curOp.role == OperatorRole.admin
+                                      ? DossierBadgeVariant.primary
+                                      : DossierBadgeVariant.neutral,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Shift Operator ID: ${curOp.id}  •  ${curOp.kioskName}',
+                              style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        DossierButton(
+                          text: 'End Shift / Switch',
+                          icon: Icons.swap_horiz_rounded,
+                          variant: DossierButtonVariant.outline,
+                          size: DossierButtonSize.sm,
+                          onPressed: () {
+                            ref.read(authProvider.notifier).logout();
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(builder: (_) => const AuthScreen()),
+                            );
+                          },
+                        ),
+                        DossierButton(
+                          text: 'Sign Out Account',
+                          icon: Icons.logout_rounded,
+                          variant: DossierButtonVariant.danger,
+                          size: DossierButtonSize.sm,
+                          onPressed: () {
+                            ref.read(authProvider.notifier).signOut();
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(builder: (_) => const AuthScreen()),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                const Divider(),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  children: [
+                    _buildMetaMetric('Mobile Contact', curOp.phone.isNotEmpty ? curOp.phone : 'Not Linked', Icons.phone_android_rounded),
+                    _buildMetaMetric('Email Address', curOp.email ?? user?.email ?? 'None', Icons.email_outlined),
+                    _buildMetaMetric('Auth Provider', user?.provider.name.toUpperCase() ?? 'LOCAL PIN', Icons.security_rounded),
+                    _buildMetaMetric('Last Shift Login', curOp.lastLoginAt != null ? curOp.lastLoginAt!.toLocal().toString().substring(0, 16) : 'Current Session', Icons.access_time_rounded),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          // 2. Responsive 2-Column Grid: Edit Profile & Security
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 850;
+
+              final editProfileCard = DossierCard(
+                variant: DossierCardVariant.outlined,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.edit_note_rounded, size: 18, color: Color(0xFF6366F1)),
+                        SizedBox(width: 8),
+                        Text('Edit My Profile Details', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    DossierInputField(
+                      key: const ValueKey('profile_name_input'),
+                      label: 'Full Name',
+                      controller: _userFullNameCtrl,
+                      prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
+                    ),
+                    const SizedBox(height: 12),
+                    DossierInputField(
+                      key: const ValueKey('profile_phone_input'),
+                      label: 'Mobile Contact',
+                      controller: _userPhoneCtrl,
+                      prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 12),
+                    DossierInputField(
+                      key: const ValueKey('profile_email_input'),
+                      label: 'Email Address (Optional)',
+                      controller: _userEmailCtrl,
+                      prefixIcon: const Icon(Icons.email_outlined, size: 18),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 18),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: DossierButton(
+                        text: 'Save Profile',
+                        icon: Icons.check_circle_rounded,
+                        variant: DossierButtonVariant.primary,
+                        size: DossierButtonSize.sm,
+                        onPressed: _saveUserProfile,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              final changePinCard = DossierCard(
+                variant: DossierCardVariant.outlined,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.pin_rounded, size: 18, color: Color(0xFF6366F1)),
+                        SizedBox(width: 8),
+                        Text('Change 4-Digit Shift PIN', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    DossierInputField(
+                      key: const ValueKey('profile_cur_pin_input'),
+                      label: 'Current 4-Digit PIN',
+                      hintText: '****',
+                      controller: _currentPinCtrl,
+                      obscureText: true,
+                      prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 12),
+                    DossierInputField(
+                      key: const ValueKey('profile_new_pin_input'),
+                      label: 'New 4-Digit PIN',
+                      hintText: '****',
+                      controller: _newPinCtrl,
+                      obscureText: true,
+                      prefixIcon: const Icon(Icons.key_rounded, size: 18),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 12),
+                    DossierInputField(
+                      key: const ValueKey('profile_confirm_pin_input'),
+                      label: 'Confirm New PIN',
+                      hintText: '****',
+                      controller: _confirmPinCtrl,
+                      obscureText: true,
+                      prefixIcon: const Icon(Icons.check_rounded, size: 18),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 18),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: DossierButton(
+                        text: 'Update PIN',
+                        icon: Icons.lock_reset_rounded,
+                        variant: DossierButtonVariant.primary,
+                        size: DossierButtonSize.sm,
+                        onPressed: _handleChangePin,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+
+              if (isWide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: editProfileCard),
+                    const SizedBox(width: 16),
+                    Expanded(child: changePinCard),
+                  ],
+                );
+              }
+
+              return Column(
+                children: [
+                  editProfileCard,
+                  const SizedBox(height: 16),
+                  changePinCard,
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 18),
+
+          // 3. Workplace & Hardware Preferences for this Operator
+          DossierCard(
+            variant: DossierCardVariant.glass,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.print_rounded, size: 18, color: Color(0xFF6366F1)),
+                    SizedBox(width: 8),
+                    Text('My Workplace & POS Hardware Defaults', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                SwitchListTile(
+                  title: const Text('Include Operator Name on Thermal Receipts', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Prints your name & shift ID at the bottom of customer receipts', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  value: _includeOperatorOnReceipt,
+                  onChanged: (val) => setState(() => _includeOperatorOnReceipt = val),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const Divider(),
+                SwitchListTile(
+                  title: const Text('Auto-Trigger ESC/POS Paper Cut', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Sends GS V 66 0 full-cut pulse after invoice print', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  value: _autoCutReceipt,
+                  onChanged: (val) => setState(() => _autoCutReceipt = val),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const Divider(),
+                SwitchListTile(
+                  title: const Text('Audio & Haptic Feedback on Quick Tender', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Play chime when cash / UPI payment is finalized in POS pad', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  value: _soundFeedback,
+                  onChanged: (val) => setState(() => _soundFeedback = val),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Thermal Slip Width Format', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text('Select your active printer roll width', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      ],
+                    ),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: '58mm', label: Text('58mm (2")', style: TextStyle(fontSize: 12))),
+                        ButtonSegment(value: '80mm', label: Text('80mm (3")', style: TextStyle(fontSize: 12))),
+                      ],
+                      selected: {_receiptPaperWidth},
+                      onSelectionChanged: (set) => setState(() => _receiptPaperWidth = set.first),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetaMetric(String label, String value, IconData icon) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: const Color(0xFF6366F1)),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500)),
+            Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Tab 2: Services Catalog & Opt-ins
+  // ─────────────────────────────────────────────────────────────
   Widget _buildServicesCatalogTab(KioskSettings settings, bool isDark) {
     final servicesAsync = ref.watch(activeServicesStreamProvider);
 
@@ -313,9 +993,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                                     ),
                                     const SizedBox(width: 6),
                                     DossierBadge(
-                                      text: _categoryLabels[s.category] ?? s.category,
+                                      label: _categoryLabels[s.category] ?? s.category,
                                       variant: DossierBadgeVariant.neutral,
-                                      fontSize: 9.5,
                                     ),
                                   ],
                                 ),
@@ -362,14 +1041,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     );
   }
 
-  // --- Tab 2: Currency & Theme Customization ---
+  // ─────────────────────────────────────────────────────────────
+  // Tab 3: Currency & Appearance Theme
+  // ─────────────────────────────────────────────────────────────
   Widget _buildCurrencyThemeTab(KioskSettings settings, bool isDark) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Theme Mode Switcher
           DossierCard(
             variant: DossierCardVariant.glass,
             padding: const EdgeInsets.all(16),
@@ -407,7 +1087,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
           ),
           const SizedBox(height: 16),
 
-          // Currency Customizer
           DossierCard(
             variant: DossierCardVariant.glass,
             padding: const EdgeInsets.all(16),
@@ -446,83 +1125,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     );
   }
 
-  // --- Tab 3: Kiosk Profile & Hardware / QR Settings ---
-  Widget _buildKioskProfileTab(KioskSettings settings, bool isDark) {
-    final authState = ref.watch(authProvider);
-    final currentOp = authState.currentOperator;
+  // ─────────────────────────────────────────────────────────────
+  // Tab 4: Kiosk Profile & Hardware / QR Settings
+  // ─────────────────────────────────────────────────────────────
+  Widget _buildKioskProfileTab(KioskSettings settings, AuthState auth, bool isDark) {
+    final isAdmin = auth.currentOperator?.role == OperatorRole.admin || auth.user?.role == 'admin';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Active Operator Account Banner
-          DossierCard(
-            variant: DossierCardVariant.elevated,
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.badge_rounded, size: 18, color: Color(0xFF6366F1)),
-                        SizedBox(width: 8),
-                        Text('Current Kiosk Operator', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                      ],
+          if (!isAdmin) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.lock_rounded, color: Colors.amber, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Read-Only Mode: Center name, address, and merchant UPI ID can only be modified by the Administrator.',
+                      style: TextStyle(fontSize: 12, color: Colors.amber),
                     ),
-                    if (currentOp != null)
-                      DossierBadge(
-                        label: currentOp.role.label,
-                        variant: DossierBadgeVariant.primary,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                if (currentOp != null)
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: currentOp.role.color,
-                        child: Text(
-                          currentOp.initials,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(currentOp.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            const SizedBox(height: 2),
-                            Text('Phone: ${currentOp.phone} • PIN: ••••',
-                                style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))),
-                          ],
-                        ),
-                      ),
-                      DossierButton(
-                        text: 'Sign Out',
-                        icon: Icons.logout_rounded,
-                        variant: DossierButtonVariant.danger,
-                        size: DossierButtonSize.sm,
-                        onPressed: () {
-                          ref.read(authProvider.notifier).logout();
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => const AuthScreen()),
-                          );
-                        },
-                      ),
-                    ],
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-
+            const SizedBox(height: 14),
+          ],
           DossierCard(
             variant: DossierCardVariant.glass,
             padding: const EdgeInsets.all(20),
@@ -539,6 +1175,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                 const SizedBox(height: 16),
                 DossierInputField(
                   controller: _kioskNameCtrl,
+                  readOnly: !isAdmin,
                   label: 'Kiosk / Cyber Center Name *',
                   hintText: 'e.g. Metro CSC Center',
                   prefixIcon: const Icon(Icons.store_rounded, size: 18),
@@ -546,6 +1183,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                 const SizedBox(height: 14),
                 DossierInputField(
                   controller: _kioskPhoneCtrl,
+                  readOnly: !isAdmin,
                   label: 'Public Contact Number *',
                   hintText: 'e.g. +91 98765 43210',
                   prefixIcon: const Icon(Icons.phone_rounded, size: 18),
@@ -553,6 +1191,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                 const SizedBox(height: 14),
                 DossierInputField(
                   controller: _kioskAddressCtrl,
+                  readOnly: !isAdmin,
                   label: 'Center Physical Address',
                   hintText: 'e.g. Shop 4, Main Market, Civil Lines',
                   prefixIcon: const Icon(Icons.location_on_rounded, size: 18),
@@ -560,23 +1199,191 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                 const SizedBox(height: 14),
                 DossierInputField(
                   controller: _upiVpaCtrl,
+                  readOnly: !isAdmin,
                   label: 'Merchant UPI ID *',
                   hintText: 'e.g. yourshop@oksbi',
                   prefixIcon: const Icon(Icons.qr_code_rounded, size: 18),
                 ),
-                const SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: DossierButton(
-                    text: 'Save Kiosk Profile',
-                    icon: Icons.save_rounded,
-                    variant: DossierButtonVariant.primary,
-                    size: DossierButtonSize.md,
-                    onPressed: _saveKioskProfile,
+                if (isAdmin) ...[
+                  const SizedBox(height: 20),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: DossierButton(
+                      text: 'Save Kiosk Profile',
+                      icon: Icons.save_rounded,
+                      variant: DossierButtonVariant.primary,
+                      size: DossierButtonSize.md,
+                      onPressed: _saveKioskProfile,
+                    ),
                   ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Tab 5: Team & Operators (ADMIN ONLY)
+  // ─────────────────────────────────────────────────────────────
+  Widget _buildTeamManagementTab(AuthState auth, bool isDark) {
+    final isAdmin = auth.currentOperator?.role == OperatorRole.admin || auth.user?.role == 'admin';
+    final operators = auth.registeredOperators;
+
+    if (!isAdmin) {
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: DossierCard(
+            variant: DossierCardVariant.glass,
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.shield_rounded, size: 36, color: Color(0xFF6366F1)),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Admin Authorization Required',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Only the Kiosk Administrator / Owner can provision, edit, and deactivate desk operator accounts.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
             ),
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 10,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Kiosk Operator Team Roster',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const Text(
+                    'Manage desk counter operators, assign roles, and configure 4-digit PINs.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+              DossierButton(
+                text: 'Provision Operator',
+                icon: Icons.person_add_rounded,
+                variant: DossierButtonVariant.primary,
+                size: DossierButtonSize.sm,
+                onPressed: _showAddOperatorDialog,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: operators.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, i) {
+              final op = operators[i];
+              final isMasterAdmin = op.id == auth.adminOperator?.id;
+
+              return DossierCard(
+                variant: DossierCardVariant.outlined,
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: op.role.color,
+                      child: Text(op.initials, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(op.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const SizedBox(width: 8),
+                              DossierBadge(
+                                label: op.role.label,
+                                variant: op.role == OperatorRole.admin ? DossierBadgeVariant.primary : DossierBadgeVariant.neutral,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Phone: ${op.phone.isNotEmpty ? op.phone : "None"} • PIN: •••• • Added: ${op.createdAt.toLocal().toString().substring(0, 10)}',
+                            style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_rounded, size: 18),
+                          tooltip: 'Edit Operator',
+                          onPressed: () => _showEditOperatorDialog(op),
+                        ),
+                        if (!isMasterAdmin)
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                            tooltip: 'Remove Operator',
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Remove Operator?'),
+                                  content: Text('Are you sure you want to remove ${op.fullName}? They will no longer be able to log in to this kiosk.'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                                      child: const Text('Remove'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await ref.read(authProvider.notifier).deleteOperator(operatorId: op.id);
+                              }
+                            },
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
