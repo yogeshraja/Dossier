@@ -69,25 +69,34 @@ class _DailySalesRegisterScreenState extends ConsumerState<DailySalesRegisterScr
   }
 
   List<SparklinePoint> _generateHourlyPoints(List<Invoice> invoices) {
+    int minHour = 8;
+    int maxHour = 20;
+
+    for (final inv in invoices) {
+      final h = inv.createdAt.hour;
+      if (h < minHour) minHour = h;
+      if (h > maxHour) maxHour = h;
+    }
+
     final Map<int, (double total, int count)> hourlyMap = {};
-    for (int h = 8; h <= 20; h++) {
+    for (int h = minHour; h <= maxHour; h++) {
       hourlyMap[h] = (0.0, 0);
     }
 
     for (final inv in invoices) {
       final h = inv.createdAt.hour;
-      if (h >= 8 && h <= 20) {
-        final current = hourlyMap[h] ?? (0.0, 0);
-        hourlyMap[h] = (current.$1 + inv.grandTotal, current.$2 + 1);
-      }
+      final current = hourlyMap[h] ?? (0.0, 0);
+      hourlyMap[h] = (current.$1 + inv.grandTotal, current.$2 + 1);
     }
 
-    return hourlyMap.entries.map((e) {
-      final hourLabel = '${e.key.toString().padLeft(2, '0')}:00';
+    final sortedKeys = hourlyMap.keys.toList()..sort();
+    return sortedKeys.map((h) {
+      final val = hourlyMap[h]!;
+      final hourLabel = '${h.toString().padLeft(2, '0')}:00';
       return SparklinePoint(
         label: hourLabel,
-        value: e.value.$1,
-        count: e.value.$2,
+        value: val.$1,
+        count: val.$2,
       );
     }).toList();
   }

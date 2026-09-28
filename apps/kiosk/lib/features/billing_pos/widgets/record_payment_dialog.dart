@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:dossier/data/local/app_database.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
@@ -53,14 +55,45 @@ class _RecordPaymentDialogState extends ConsumerState<RecordPaymentDialog> {
 
     try {
       final db = ref.read(databaseProvider);
+      const uuid = Uuid();
       final newAdvancePaid = widget.caseItem.advancePaid + amount;
+      final isPaidInFull = newAdvancePaid >= widget.caseItem.totalEstimatedAmount;
+
       await db.updateCasePayment(widget.caseItem.id, newAdvancePaid);
+
+      // Generate corresponding invoice and ledger entry so it appears in Daily Register & Cloud Sync
+      final invoiceId = uuid.v4();
+      final invNumber = 'INV-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 10000}';
+
+      await db.insertInvoice(
+        InvoicesCompanion.insert(
+          id: invoiceId,
+          invoiceNumber: invNumber,
+          dossierId: drift.Value(widget.customer.id),
+          caseId: drift.Value(widget.caseItem.id),
+          invoiceType: 'CASE_PAYMENT',
+          subtotal: amount,
+          grandTotal: amount,
+          amountPaid: drift.Value(amount),
+          paymentStatus: drift.Value(isPaidInFull ? 'PAID' : 'PARTIAL'),
+        ),
+      );
+
+      await db.insertLedgerEntry(
+        LedgerEntriesCompanion.insert(
+          id: uuid.v4(),
+          invoiceId: invoiceId,
+          amount: amount,
+          paymentMode: _paymentMode,
+          transactionRef: drift.Value('Payment for Case: ${widget.caseItem.title}'),
+        ),
+      );
 
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Payment of ₹${amount.toStringAsFixed(0)} recorded successfully!'),
+            content: Text('Payment of ₹${amount.toStringAsFixed(0)} recorded via $_paymentMode!'),
             backgroundColor: const Color(0xFF10B981),
           ),
         );
