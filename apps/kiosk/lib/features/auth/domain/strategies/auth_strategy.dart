@@ -71,7 +71,7 @@ abstract class BaseAuthStrategy implements AuthStrategy {
   const BaseAuthStrategy();
 
   /// Validate inputs prior to dispatching network requests
-  String? validate();
+  String? validate({bool isSignUp = false});
 
   /// Template method executing validation followed by provider-specific implementation
   @override
@@ -80,7 +80,7 @@ abstract class BaseAuthStrategy implements AuthStrategy {
     required bool isSignUp,
     http.Client? client,
   }) async {
-    final validationError = validate();
+    final validationError = validate(isSignUp: isSignUp);
     if (validationError != null) {
       return StrategyAuthResult.failure(validationError);
     }
@@ -88,7 +88,7 @@ abstract class BaseAuthStrategy implements AuthStrategy {
     try {
       return await performAuthentication(baseUrl: baseUrl, isSignUp: isSignUp, client: client);
     } catch (e) {
-      return StrategyAuthResult.failure('Authentication failed: ${e.toString()}');
+      return StrategyAuthResult.failure('Authentication error: ${e.toString()}');
     }
   }
 

@@ -1,21 +1,22 @@
 # Project State & Memory: Dossier CRM & Kiosk Vault
 
 **Last Updated:** 2026-09-28  
-**Status:** Two-Tier Operator Authentication, Software Activation Gate & Web-First Architecture Completed & Verified (42/42 tests passing, 0 analyzer issues)
+**Status:** Sign-up & Authentication Flow Audited & Verified (100% test pass rate, 0 analyzer issues)
 
 ---
 
 ## 1. Project Overview & Architecture Decisions
 - **Monorepo Layout:**
   - `apps/kiosk/`: Flutter 3.47.x (Dart 3.13.x) targeting Web (WASM), Desktop (Windows, macOS, Linux), and Mobile (Android, iOS).
+  - `apps/web/`: Web marketing landing page & interactive documentation portal (Vite + Vanilla CSS/JS).
   - `services/api/`: Cloudflare Workers + D1 SQLite + Hono serverless backend.
   - Root: `mise.toml` toolchain version manager and `package.json` task orchestration.
 
 ### OOP Authentication Strategy & Multi-Step Kiosk Registration Flow
 1. **Inheritance-Based Auth Strategy Hierarchy:**
-   - Base interface `AuthStrategy` and abstract base class `BaseAuthStrategy` with template validation & execution.
-   - Specific implementations: `EmailPasswordAuthStrategy`, `PhonePasswordAuthStrategy`, and `GoogleSsoAuthStrategy` (Google SSO).
-   - Resolved via `AuthStrategyFactory`.
+   - Base interface [AuthStrategy](file:///home/yogesh/workspace/dossier/apps/kiosk/lib/features/auth/domain/strategies/auth_strategy.dart) and abstract base class [BaseAuthStrategy](file:///home/yogesh/workspace/dossier/apps/kiosk/lib/features/auth/domain/strategies/auth_strategy.dart#L70) with template validation & execution.
+   - Specific implementations: [EmailPasswordAuthStrategy](file:///home/yogesh/workspace/dossier/apps/kiosk/lib/features/auth/domain/strategies/email_password_auth_strategy.dart), [PhonePasswordAuthStrategy](file:///home/yogesh/workspace/dossier/apps/kiosk/lib/features/auth/domain/strategies/phone_password_auth_strategy.dart), and [GoogleSsoAuthStrategy](file:///home/yogesh/workspace/dossier/apps/kiosk/lib/features/auth/domain/strategies/google_sso_auth_strategy.dart).
+   - Resolved via [AuthStrategyFactory](file:///home/yogesh/workspace/dossier/apps/kiosk/lib/features/auth/domain/strategies/auth_strategy_factory.dart).
 2. **Step 1: User Login / Sign-Up:**
    - App opens with user authentication screen supporting Email/Password, Mobile/Password, and Google SSO.
 3. **Step 2: Kiosk Product Registration & Activation:**
@@ -26,7 +27,16 @@
 
 ---
 
-## 2. Testing & Quality Assurance
+## 2. Sign-Up Flow Audit & Bug Fixes Summary
+- **Bug 1 (Method Signature Mismatch in Strategy Hierarchy):** `GoogleSsoAuthStrategy.validate` did not accept the optional named parameter `{bool isSignUp = false}` defined in `BaseAuthStrategy`, which caused runtime invocation errors. Fixed.
+- **Bug 2 (Missing User Attributes in Kiosk Activation):** `AuthNotifier.registerKioskAndActivate` omitted `userName`, `userPhone`, and `userEmail` parameters when forwarding to `ServerAuthApiService`, resulting in missing operator metadata during offline setup. Fixed.
+- **Bug 3 (Stale Error Messages on Mode Switch):** In `AuthScreen`, switching between Sign-In / Sign-Up or Email / Mobile tabs did not reset active error messages. Added `clearError()` invocations to all tab switches.
+- **Bug 4 (Hardcoded NULL Phone in Kiosks Table):** In `services/api/src/auth.ts`, `/kiosk/register` bound `NULL` for the kiosk contact phone instead of resolving `userPhone` or `user.mobile`. Fixed.
+- **Bug 5 (Offline Resiliency in Google SSO Strategy):** Added seamless offline session fallback in `GoogleSsoAuthStrategy` for network timeouts. Fixed.
+
+---
+
+## 3. Testing & Quality Assurance
 - **Total Tests:** 43/43 unit, integration, and widget tests passing (100% pass rate).
   - `apps/kiosk/test/auth_server_test.dart` (4 tests: email strategy, phone strategy, Google SSO strategy, full login -> kiosk registration -> shift login flow).
   - `apps/kiosk/test/modernization_test.dart` (9 tests: glassmorphism, command palette, sparklines, thermal receipt).

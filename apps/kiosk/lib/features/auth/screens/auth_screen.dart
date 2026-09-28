@@ -559,7 +559,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               children: [
                 Expanded(
                   child: InkWell(
-                    onTap: () => setState(() => _authMode = AuthMode.signIn),
+                    onTap: () {
+                      ref.read(authProvider.notifier).clearError();
+                      setState(() => _authMode = AuthMode.signIn);
+                    },
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -586,7 +589,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
                 Expanded(
                   child: InkWell(
-                    onTap: () => setState(() => _authMode = AuthMode.signUp),
+                    onTap: () {
+                      ref.read(authProvider.notifier).clearError();
+                      setState(() => _authMode = AuthMode.signUp);
+                    },
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -624,12 +630,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ChoiceChip(
                 label: const Text('Email & Password', style: TextStyle(fontSize: 12)),
                 selected: _authMethod == InputAuthMethod.email,
-                onSelected: (val) => setState(() => _authMethod = InputAuthMethod.email),
+                onSelected: (val) {
+                  ref.read(authProvider.notifier).clearError();
+                  setState(() => _authMethod = InputAuthMethod.email);
+                },
               ),
               ChoiceChip(
                 label: const Text('Mobile & Password', style: TextStyle(fontSize: 12)),
                 selected: _authMethod == InputAuthMethod.mobile,
-                onSelected: (val) => setState(() => _authMethod = InputAuthMethod.mobile),
+                onSelected: (val) {
+                  ref.read(authProvider.notifier).clearError();
+                  setState(() => _authMethod = InputAuthMethod.mobile);
+                },
               ),
             ],
           ),

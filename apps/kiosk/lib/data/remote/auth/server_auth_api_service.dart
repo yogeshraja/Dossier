@@ -94,6 +94,9 @@ class ServerAuthApiService {
   /// Register Kiosk & Activate Software on this Device
   Future<ServerAuthResult> registerKioskAndActivate({
     required String userId,
+    String? userName,
+    String? userPhone,
+    String? userEmail,
     required String kioskName,
     String? kioskAddress,
     String? merchantUpiVpa,
@@ -104,6 +107,9 @@ class ServerAuthApiService {
 
     final payload = {
       'userId': userId,
+      'userName': userName?.trim(),
+      'userPhone': userPhone?.trim(),
+      'userEmail': userEmail?.trim(),
       'kioskName': cleanKiosk,
       'kioskAddress': kioskAddress?.trim(),
       'merchantUpiVpa': merchantUpiVpa?.trim().isNotEmpty == true ? merchantUpiVpa!.trim() : 'csckiosk@oksbi',
@@ -130,9 +136,9 @@ class ServerAuthApiService {
 
         final adminOperator = KioskOperator(
           id: adminData['id'] as String? ?? userId,
-          fullName: adminData['name'] as String? ?? 'Admin',
-          phone: adminData['mobile'] as String? ?? '',
-          email: adminData['email'] as String?,
+          fullName: adminData['name'] as String? ?? userName ?? 'Admin',
+          phone: adminData['mobile'] as String? ?? userPhone ?? '',
+          email: adminData['email'] as String? ?? userEmail,
           role: OperatorRole.admin,
           passwordHash: '',
           pin: cleanPin,
@@ -180,8 +186,9 @@ class ServerAuthApiService {
     } catch (e) {
       final fallbackAdmin = KioskOperator(
         id: userId,
-        fullName: 'Admin (Offline)',
-        phone: '',
+        fullName: userName?.isNotEmpty == true ? userName! : 'Admin (Offline)',
+        phone: userPhone ?? '',
+        email: userEmail,
         role: OperatorRole.admin,
         passwordHash: '',
         pin: cleanPin,

@@ -182,6 +182,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     final result = await _serverAuthApi.registerKioskAndActivate(
       userId: userId,
+      userName: state.user?.name,
+      userPhone: state.user?.phone,
+      userEmail: state.user?.email,
       kioskName: cleanKiosk,
       kioskAddress: kioskAddress,
       merchantUpiVpa: merchantUpiVpa,
@@ -480,6 +483,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Sign out entire account / user
   void signOut() {
     state = const AuthState();
+  }
+
+  /// Clear any active error message
+  void clearError() {
+    if (state.errorMessage != null) {
+      state = state.copyWith(clearErrorMessage: true);
+    }
   }
 
   void _updateOperatorState(KioskOperator operator) {

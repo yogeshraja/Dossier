@@ -318,6 +318,10 @@ authRouter.post("/kiosk/register", async (c) => {
   try {
     const body = await c.req.json<{
       userId?: string;
+      userName?: string;
+      userPhone?: string;
+      userEmail?: string;
+      phone?: string;
       kioskName: string;
       kioskAddress?: string;
       merchantUpiVpa?: string;
@@ -338,28 +342,59 @@ authRouter.post("/kiosk/register", async (c) => {
     const kioskId = `ksk_${crypto.randomUUID()}`;
     const pinHashed = await hashPin(pin);
 
-    // Create Kiosk record
-    await db
-      .prepare(
-        "INSERT INTO kiosks (id, name, owner_id, address, phone, upi_vpa, license_key, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, ?, 1, ?, ?)"
-      )
-      .bind(kioskId, kioskName, userId, body.kioskAddress || null, body.merchantUpiVpa || null, `LIC-${crypto.randomUUID().substring(0, 8).toUpperCase()}`, now, now)
-      .run();
-
-    // Update user's kiosk_id and pin
-    await db
-      .prepare("UPDATE users SET kiosk_id = ?, pin_hash = ?, updated_at = ? WHERE id = ?")
-      .bind(kioskId, pinHashed, now, userId)
-      .run();
-
-    // Fetch updated user info
-    const user = await db.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<{
+    let user = await db.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<{
       id: string;
       name: string;
       email: string | null;
       mobile: string | null;
       role: string;
     }>();
+
+    const phoneVal = body.phone || body.userPhone || user?.mobile || null;
+    const emailVal = body.userEmail || user?.email || null;
+    const nameVal = body.userName || user?.name || "Admin";
+
+    // Create Kiosk record
+    await db
+      .prepare(
+        "INSERT INTO kiosks (id, name, owner_id, address, phone, upi_vpa, license_key, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+      )
+      .bind(
+        kioskId,
+        kioskName,
+        userId,
+        body.kioskAddress || null,
+        phoneVal,
+        body.merchantUpiVpa || null,
+        `LIC-${crypto.randomUUID().substring(0, 8).toUpperCase()}`,
+        now,
+        now
+      )
+      .run();
+
+    if (!user) {
+      // Create user if not present
+      await db
+        .prepare(
+          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, auth_provider, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 'email', 1, ?, ?)"
+        )
+        .bind(userId, kioskId, nameVal, emailVal, phoneVal, pinHashed, now, now)
+        .run();
+
+      user = {
+        id: userId,
+        name: nameVal,
+        email: emailVal,
+        mobile: phoneVal,
+        role: "admin",
+      };
+    } else {
+      // Update user's kiosk_id and pin
+      await db
+        .prepare("UPDATE users SET kiosk_id = ?, pin_hash = ?, updated_at = ? WHERE id = ?")
+        .bind(kioskId, pinHashed, now, userId)
+        .run();
+    }
 
     const token = await generateToken({ userId, role: user?.role || "admin", email: user?.email || "" });
 
@@ -371,14 +406,14 @@ authRouter.post("/kiosk/register", async (c) => {
         id: kioskId,
         name: kioskName,
         address: body.kioskAddress || "",
-        phone: user?.mobile || "",
+        phone: user?.mobile || phoneVal || "",
         merchantUpiVpa: body.merchantUpiVpa || "",
       },
       admin: {
         id: userId,
-        name: user?.name || "Admin",
-        email: user?.email || "",
-        mobile: user?.mobile || "",
+        name: user?.name || nameVal,
+        email: user?.email || emailVal || "",
+        mobile: user?.mobile || phoneVal || "",
         role: "admin",
       },
       operators: [
