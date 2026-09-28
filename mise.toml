@@ -71,3 +71,9 @@ run = "flutter run -d chrome"
 [tasks."test:all"]
 description = "Verify entire monorepo (Flutter test + analyze + Worker build + Web build)"
 depends = ["test:client", "analyze:client", "build:api", "build:web"]
+
+[tasks.deploy]
+description = "One-shot production deployment: validates full test suite and deploys Cloudflare Edge backend & Web bundle"
+depends = ["test:all"]
+dir = "services/api"
+run = "npm run deploy"

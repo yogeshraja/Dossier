@@ -8,6 +8,7 @@
     "apps/web"
   ],
   "scripts": {
+    "deploy": "mise run deploy",
     "dev:api": "npm --prefix services/api run dev",
     "deploy:api": "npm --prefix services/api run deploy",
     "db:local": "npm --prefix services/api run db:init:local",
