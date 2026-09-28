@@ -65,8 +65,8 @@ void main() {
       expect(find.text('Dossiers & Intake'), findsOneWidget);
       expect(find.text('Media Studio'), findsOneWidget);
       expect(find.text('POS & Billing'), findsOneWidget);
-      expect(find.text('Vault Sync'), findsOneWidget);
-      expect(find.text('Catalog & Settings'), findsOneWidget);
+      expect(find.text('Daily Register'), findsOneWidget);
+      expect(find.text('Settings & Vault'), findsOneWidget);
     });
 
     testWidgets('KioskWorkstationHome renders on Tablet (768x1024) with 0 overflows', (WidgetTester tester) async {

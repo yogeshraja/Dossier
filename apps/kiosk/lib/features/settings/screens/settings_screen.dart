@@ -13,9 +13,11 @@ import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
+import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key});
+  final int initialTabIndex;
+  const SettingsScreen({super.key, this.initialTabIndex = 0});
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -75,7 +77,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this, initialIndex: widget.initialTabIndex.clamp(0, 5));
 
     final settings = ref.read(kioskSettingsProvider);
     _kioskNameCtrl.text = settings.kioskName;
@@ -584,7 +586,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                         tabs: const [
                           Tab(text: 'My Profile'),
                           Tab(text: 'Catalog'),
-                          Tab(text: 'Currency & Theme'),
+                          Tab(text: 'Vault & Sync'),
+                          Tab(text: 'Appearance'),
                           Tab(text: 'Kiosk Identity'),
                           Tab(text: 'Team & Operators'),
                         ],
@@ -612,7 +615,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
                               overflow: TextOverflow.ellipsis),
                           const SizedBox(height: 2),
-                          const Text('Personal operator profiles, catalog pricing, team administration, and hardware defaults',
+                          const Text('Personal operator profiles, catalog pricing, cloud vault sync, team administration, and hardware defaults',
                               style: TextStyle(fontSize: 11, color: Colors.grey),
                               overflow: TextOverflow.ellipsis),
                         ],
@@ -620,7 +623,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                     ),
                     const SizedBox(width: 16),
                     SizedBox(
-                      width: 600,
+                      width: 680,
                       child: TabBar(
                         controller: _tabController,
                         isScrollable: true,
@@ -631,6 +634,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                         tabs: const [
                           Tab(icon: Icon(Icons.person_rounded, size: 15), text: 'My Profile'),
                           Tab(icon: Icon(Icons.format_list_bulleted_rounded, size: 15), text: 'Services Catalog'),
+                          Tab(icon: Icon(Icons.cloud_sync_rounded, size: 15), text: 'Vault & Sync'),
                           Tab(icon: Icon(Icons.palette_rounded, size: 15), text: 'Appearance'),
                           Tab(icon: Icon(Icons.storefront_rounded, size: 15), text: 'Kiosk Profile'),
                           Tab(icon: Icon(Icons.badge_rounded, size: 15), text: 'Team & Operators'),
@@ -650,6 +654,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               children: [
                 _buildUserProfileTab(authState, isDark),
                 _buildServicesCatalogTab(settings, isDark),
+                const VaultSyncScreen(),
                 _buildCurrencyThemeTab(settings, isDark),
                 _buildKioskProfileTab(settings, authState, isDark),
                 _buildTeamManagementTab(authState, isDark),
