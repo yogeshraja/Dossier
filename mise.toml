@@ -38,6 +38,16 @@ description = "Deploy Cloudflare Worker to production"
 dir = "services/api"
 run = "npm run deploy"
 
+[tasks."db:generate"]
+description = "Generate SQL migration files automatically from Drizzle TypeScript schema"
+dir = "services/api"
+run = "npm run db:generate"
+
+[tasks."db:studio"]
+description = "Open Drizzle Studio visual web GUI to browse and edit D1 database"
+dir = "services/api"
+run = "npm run db:studio"
+
 [tasks."db:local"]
 description = "Initialize or reset local D1 SQLite database"
 dir = "services/api"
