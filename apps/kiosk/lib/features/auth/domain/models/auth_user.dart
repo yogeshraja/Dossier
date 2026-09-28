@@ -10,6 +10,11 @@ class AuthUser {
   final String role;
   final bool hasKiosk;
   final String? kioskId;
+  final String status; // 'active', 'suspended', 'deleted'
+  final bool isSuspended;
+  final DateTime? suspendedAt;
+  final String? suspendedReason;
+  final DateTime? deletedAt;
 
   const AuthUser({
     required this.id,
@@ -21,6 +26,11 @@ class AuthUser {
     this.role = 'admin',
     this.hasKiosk = false,
     this.kioskId,
+    this.status = 'active',
+    this.isSuspended = false,
+    this.suspendedAt,
+    this.suspendedReason,
+    this.deletedAt,
   });
 
   AuthUser copyWith({
@@ -33,6 +43,11 @@ class AuthUser {
     String? role,
     bool? hasKiosk,
     String? kioskId,
+    String? status,
+    bool? isSuspended,
+    DateTime? suspendedAt,
+    String? suspendedReason,
+    DateTime? deletedAt,
   }) {
     return AuthUser(
       id: id ?? this.id,
@@ -44,6 +59,11 @@ class AuthUser {
       role: role ?? this.role,
       hasKiosk: hasKiosk ?? this.hasKiosk,
       kioskId: kioskId ?? this.kioskId,
+      status: status ?? this.status,
+      isSuspended: isSuspended ?? this.isSuspended,
+      suspendedAt: suspendedAt ?? this.suspendedAt,
+      suspendedReason: suspendedReason ?? this.suspendedReason,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
 
@@ -63,6 +83,15 @@ class AuthUser {
       role: json['role'] as String? ?? 'admin',
       hasKiosk: json['hasKiosk'] as bool? ?? false,
       kioskId: json['kioskId'] as String?,
+      status: json['status'] as String? ?? 'active',
+      isSuspended: json['isSuspended'] as bool? ?? (json['is_suspended'] == 1),
+      suspendedAt: json['suspendedAt'] != null
+          ? DateTime.tryParse(json['suspendedAt'] as String)
+          : (json['suspended_at'] != null ? DateTime.tryParse(json['suspended_at'] as String) : null),
+      suspendedReason: json['suspendedReason'] as String? ?? json['suspended_reason'] as String?,
+      deletedAt: json['deletedAt'] != null
+          ? DateTime.tryParse(json['deletedAt'] as String)
+          : (json['deleted_at'] != null ? DateTime.tryParse(json['deleted_at'] as String) : null),
     );
   }
 
@@ -77,6 +106,11 @@ class AuthUser {
       'role': role,
       'hasKiosk': hasKiosk,
       'kioskId': kioskId,
+      'status': status,
+      'isSuspended': isSuspended,
+      'suspendedAt': suspendedAt?.toIso8601String(),
+      'suspendedReason': suspendedReason,
+      'deletedAt': deletedAt?.toIso8601String(),
     };
   }
 }

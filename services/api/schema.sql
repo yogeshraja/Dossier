@@ -8,7 +8,12 @@ CREATE TABLE IF NOT EXISTS kiosks (
     phone TEXT,
     upi_vpa TEXT,
     license_key TEXT UNIQUE,
+    status TEXT NOT NULL DEFAULT 'active', -- 'active', 'suspended', 'deleted'
     is_active INTEGER NOT NULL DEFAULT 1,
+    is_suspended INTEGER NOT NULL DEFAULT 0,
+    suspended_at TEXT,
+    suspended_reason TEXT,
+    deleted_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -25,7 +30,12 @@ CREATE TABLE IF NOT EXISTS users (
     auth_provider TEXT DEFAULT 'local', -- 'email', 'mobile', 'google', 'local'
     google_id TEXT,
     avatar_url TEXT,
+    status TEXT NOT NULL DEFAULT 'active', -- 'active', 'suspended', 'deleted'
     is_active INTEGER NOT NULL DEFAULT 1,
+    is_suspended INTEGER NOT NULL DEFAULT 0,
+    suspended_at TEXT,
+    suspended_reason TEXT,
+    deleted_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (kiosk_id) REFERENCES kiosks(id) ON DELETE SET NULL

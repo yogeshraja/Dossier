@@ -552,6 +552,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
               )),
     );
 
+    // Reject suspended operator accounts immediately
+    if (op.isSuspended) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Account is suspended${op.suspendedReason != null && op.suspendedReason!.isNotEmpty ? ": ${op.suspendedReason}" : ""}. Please contact your administrator.',
+      );
+      return false;
+    }
+
     // 1. Verify locally
     if (op.pin == cleanPin) {
       final updatedOp = op.copyWith(lastLoginAt: DateTime.now());
@@ -607,6 +616,79 @@ class AuthNotifier extends StateNotifier<AuthState> {
       clearCurrentOperator: true,
       clearErrorMessage: true,
     );
+  }
+
+  /// Delete entire user account and terminate session
+  Future<bool> deleteAccount({String? password}) async {
+    final user = state.user;
+    if (user == null) {
+      return false;
+    }
+
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
+    final success = await _serverAuthApi.deleteAccount(
+      userId: user.id,
+      token: state.serverAuthToken,
+      password: password,
+    );
+
+    if (success) {
+      // Complete state reset on account deletion
+      state = const AuthState();
+      return true;
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to delete account. Please try again.',
+      );
+      return false;
+    }
+  }
+
+  /// Suspend or unsuspend an operator (Admin only)
+  Future<bool> suspendOperator({
+    required String operatorId,
+    required bool suspend,
+    String? reason,
+  }) async {
+    final isAdmin = state.currentOperator?.role == OperatorRole.admin || state.user?.role == 'admin';
+    if (!isAdmin) {
+      state = state.copyWith(errorMessage: 'Unauthorized: Only administrators can suspend operators.');
+      return false;
+    }
+
+    if (state.adminOperator?.id == operatorId) {
+      state = state.copyWith(errorMessage: 'Cannot suspend the master admin operator.');
+      return false;
+    }
+
+    final opIndex = state.registeredOperators.indexWhere((o) => o.id == operatorId);
+    if (opIndex == -1) return false;
+
+    final oldOp = state.registeredOperators[opIndex];
+    final updatedOp = oldOp.copyWith(
+      isSuspended: suspend,
+      status: suspend ? 'suspended' : 'active',
+      suspendedAt: suspend ? DateTime.now() : null,
+      suspendedReason: suspend ? (reason ?? 'Suspended by Administrator') : null,
+    );
+
+    final updatedList = List<KioskOperator>.from(state.registeredOperators);
+    updatedList[opIndex] = updatedOp;
+
+    state = state.copyWith(
+      registeredOperators: updatedList,
+      clearErrorMessage: true,
+    );
+
+    await _serverAuthApi.suspendUser(
+      userId: operatorId,
+      suspend: suspend,
+      reason: reason,
+      token: state.serverAuthToken,
+    );
+
+    return true;
   }
 
   /// Sign out entire account / user

@@ -115,10 +115,23 @@ authRouter.post("/signin", async (c) => {
         password_hash: string | null;
         auth_provider: string | null;
         avatar_url: string | null;
+        status?: string | null;
+        is_suspended?: number | null;
+        suspended_reason?: string | null;
+        deleted_at?: string | null;
       }>();
 
     if (!user) {
       return c.json({ success: false, error: "No account found with provided credentials." }, 404);
+    }
+
+    if (user.status === "deleted" || user.deleted_at) {
+      return c.json({ success: false, error: "This account has been deleted." }, 403);
+    }
+
+    if (user.is_suspended === 1 || user.status === "suspended") {
+      const reason = user.suspended_reason ? `: ${user.suspended_reason}` : ". Please contact your administrator.";
+      return c.json({ success: false, error: `Account suspended${reason}` }, 403);
     }
 
     // Verify password if set
@@ -142,9 +155,15 @@ authRouter.post("/signin", async (c) => {
         address: string | null;
         phone: string | null;
         upi_vpa: string | null;
+        status?: string | null;
+        is_suspended?: number | null;
       }>();
 
       if (kiosk) {
+        if (kiosk.status === "deleted") {
+          return c.json({ success: false, error: "Associated kiosk has been deleted." }, 403);
+        }
+
         kioskData = {
           id: kiosk.id,
           name: kiosk.name,
@@ -154,7 +173,7 @@ authRouter.post("/signin", async (c) => {
         };
 
         const ops = await db
-          .prepare("SELECT id, name, role, mobile, email FROM users WHERE kiosk_id = ? AND is_active = 1")
+          .prepare("SELECT id, name, role, mobile, email FROM users WHERE kiosk_id = ? AND is_active = 1 AND (status IS NULL OR status != 'deleted')")
           .bind(user.kiosk_id)
           .all<{ id: string; name: string; role: string; mobile: string | null; email: string | null }>();
 
@@ -227,14 +246,26 @@ authRouter.post("/google", async (c) => {
         mobile: string | null;
         role: string;
         avatar_url: string | null;
+        status?: string | null;
+        is_suspended?: number | null;
+        suspended_reason?: string | null;
+        deleted_at?: string | null;
       }>();
 
-    if (!user) {
+    if (user) {
+      if (user.status === "deleted" || user.deleted_at) {
+        return c.json({ success: false, error: "This account has been deleted." }, 403);
+      }
+      if (user.is_suspended === 1 || user.status === "suspended") {
+        const reason = user.suspended_reason ? `: ${user.suspended_reason}` : ". Please contact your administrator.";
+        return c.json({ success: false, error: `Account suspended${reason}` }, 403);
+      }
+    } else {
       const userId = `usr_${crypto.randomUUID()}`;
       const pinHashed = await hashPin("1234");
       await db
         .prepare(
-          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, auth_provider, google_id, avatar_url, is_active, created_at, updated_at) VALUES (?, NULL, ?, ?, NULL, 'admin', ?, 'google', ?, ?, 1, ?, ?)"
+          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, auth_provider, google_id, avatar_url, status, is_active, is_suspended, created_at, updated_at) VALUES (?, NULL, ?, ?, NULL, 'admin', ?, 'google', ?, ?, 'active', 1, 0, ?, ?)"
         )
         .bind(userId, name, email, pinHashed, googleId, avatarUrl || null, now, now)
         .run();
@@ -274,7 +305,7 @@ authRouter.post("/google", async (c) => {
         };
 
         const ops = await db
-          .prepare("SELECT id, name, role, mobile, email FROM users WHERE kiosk_id = ? AND is_active = 1")
+          .prepare("SELECT id, name, role, mobile, email FROM users WHERE kiosk_id = ? AND is_active = 1 AND (status IS NULL OR status != 'deleted')")
           .bind(user.kiosk_id)
           .all<{ id: string; name: string; role: string; mobile: string | null; email: string | null }>();
 
@@ -357,7 +388,7 @@ authRouter.post("/kiosk/register", async (c) => {
     // Create Kiosk record
     await db
       .prepare(
-        "INSERT INTO kiosks (id, name, owner_id, address, phone, upi_vpa, license_key, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+        "INSERT INTO kiosks (id, name, owner_id, address, phone, upi_vpa, license_key, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 1, 0, ?, ?)"
       )
       .bind(
         kioskId,
@@ -376,7 +407,7 @@ authRouter.post("/kiosk/register", async (c) => {
       // Create user if not present
       await db
         .prepare(
-          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, auth_provider, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 'email', 1, ?, ?)"
+          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, auth_provider, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 'email', 'active', 1, 0, ?, ?)"
         )
         .bind(userId, kioskId, nameVal, emailVal, phoneVal, pinHashed, now, now)
         .run();
@@ -464,14 +495,14 @@ authRouter.post("/activate", async (c) => {
 
       await db
         .prepare(
-          "INSERT INTO kiosks (id, name, owner_id, address, phone, upi_vpa, license_key, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+          "INSERT INTO kiosks (id, name, owner_id, address, phone, upi_vpa, license_key, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 1, 0, ?, ?)"
         )
         .bind(kioskId, kioskName, adminId, body.kioskAddress || null, mobile || null, body.merchantUpiVpa || null, `LIC-${crypto.randomUUID().substring(0, 8).toUpperCase()}`, now, now)
         .run();
 
       await db
         .prepare(
-          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 1, ?, ?)"
+          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 'active', 1, 0, ?, ?)"
         )
         .bind(adminId, kioskId, name, email || null, mobile || null, pinHashed, now, now)
         .run();
@@ -550,7 +581,7 @@ authRouter.post("/operators", async (c) => {
 
     await db
       .prepare(
-        "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+        "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 1, 0, ?, ?)"
       )
       .bind(opId, body.kioskId || null, name, body.email || null, body.mobile || null, role, pinHashed, now, now)
       .run();
@@ -594,10 +625,23 @@ authRouter.post("/operator-login", async (c) => {
       mobile: string | null;
       email: string | null;
       kiosk_id: string | null;
+      status?: string | null;
+      is_suspended?: number | null;
+      suspended_reason?: string | null;
+      deleted_at?: string | null;
     }>();
 
     if (!op) {
       return c.json({ success: false, error: "Operator not found." }, 404);
+    }
+
+    if (op.status === "deleted" || op.deleted_at) {
+      return c.json({ success: false, error: "This operator account has been deleted." }, 403);
+    }
+
+    if (op.is_suspended === 1 || op.status === "suspended") {
+      const reason = op.suspended_reason ? `: ${op.suspended_reason}` : ". Please contact your administrator.";
+      return c.json({ success: false, error: `Operator account is suspended${reason}` }, 403);
     }
 
     const isValid = await verifyPin(pin, op.pin_hash);
@@ -617,6 +661,108 @@ authRouter.post("/operator-login", async (c) => {
         mobile: op.mobile || "",
         email: op.email || "",
       },
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json({ success: false, error: errorMsg }, 500);
+  }
+});
+
+// POST /api/v1/auth/user/delete - User deletes their account (Soft Delete / Hard Purge)
+authRouter.post("/user/delete", async (c) => {
+  try {
+    const body = await c.req.json<{
+      userId: string;
+      password?: string;
+      reason?: string;
+    }>();
+
+    const { userId } = body;
+    const db = c.env.DB;
+    const now = new Date().toISOString();
+
+    if (!userId) {
+      return c.json({ success: false, error: "User ID is required." }, 400);
+    }
+
+    const user = await db.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<{
+      id: string;
+      kiosk_id: string | null;
+      role: string;
+    }>();
+
+    if (!user) {
+      return c.json({ success: false, error: "User not found." }, 404);
+    }
+
+    // Soft delete user record
+    await db
+      .prepare("UPDATE users SET status = 'deleted', is_active = 0, deleted_at = ?, updated_at = ? WHERE id = ?")
+      .bind(now, now, userId)
+      .run();
+
+    // Revoke all active sessions
+    await db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
+
+    // If admin/owner, also mark kiosk as deleted
+    if (user.role === "admin" && user.kiosk_id) {
+      await db
+        .prepare("UPDATE kiosks SET status = 'deleted', is_active = 0, deleted_at = ?, updated_at = ? WHERE id = ?")
+        .bind(now, now, user.kiosk_id)
+        .run();
+    }
+
+    return c.json({
+      success: true,
+      message: "Account has been successfully deleted.",
+      deletedAt: now,
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json({ success: false, error: errorMsg }, 500);
+  }
+});
+
+// POST /api/v1/auth/user/suspend - Admin suspends or unsuspends an operator/user account
+authRouter.post("/user/suspend", async (c) => {
+  try {
+    const body = await c.req.json<{
+      userId: string;
+      suspend: boolean;
+      reason?: string;
+    }>();
+
+    const { userId, suspend, reason } = body;
+    const db = c.env.DB;
+    const now = new Date().toISOString();
+
+    if (!userId) {
+      return c.json({ success: false, error: "User ID is required." }, 400);
+    }
+
+    const status = suspend ? "suspended" : "active";
+    const isSuspended = suspend ? 1 : 0;
+    const suspendedAt = suspend ? now : null;
+    const suspendedReason = suspend ? (reason || "Suspended by Administrator") : null;
+
+    await db
+      .prepare(
+        "UPDATE users SET status = ?, is_suspended = ?, suspended_at = ?, suspended_reason = ?, updated_at = ? WHERE id = ?"
+      )
+      .bind(status, isSuspended, suspendedAt, suspendedReason, now, userId)
+      .run();
+
+    if (suspend) {
+      // Invalidate sessions for suspended user
+      await db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
+    }
+
+    return c.json({
+      success: true,
+      status,
+      isSuspended: Boolean(isSuspended),
+      suspendedAt,
+      suspendedReason,
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);

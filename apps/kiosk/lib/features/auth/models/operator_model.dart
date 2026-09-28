@@ -53,6 +53,11 @@ class KioskOperator {
   final DateTime createdAt;
   final DateTime? lastLoginAt;
   final int avatarColorIndex;
+  final String status; // 'active', 'suspended', 'deleted'
+  final bool isSuspended;
+  final DateTime? suspendedAt;
+  final String? suspendedReason;
+  final DateTime? deletedAt;
 
   const KioskOperator({
     required this.id,
@@ -68,6 +73,11 @@ class KioskOperator {
     required this.createdAt,
     this.lastLoginAt,
     this.avatarColorIndex = 0,
+    this.status = 'active',
+    this.isSuspended = false,
+    this.suspendedAt,
+    this.suspendedReason,
+    this.deletedAt,
   });
 
   String get initials {
@@ -94,6 +104,11 @@ class KioskOperator {
     DateTime? createdAt,
     DateTime? lastLoginAt,
     int? avatarColorIndex,
+    String? status,
+    bool? isSuspended,
+    DateTime? suspendedAt,
+    String? suspendedReason,
+    DateTime? deletedAt,
   }) {
     return KioskOperator(
       id: id ?? this.id,
@@ -109,6 +124,11 @@ class KioskOperator {
       createdAt: createdAt ?? this.createdAt,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       avatarColorIndex: avatarColorIndex ?? this.avatarColorIndex,
+      status: status ?? this.status,
+      isSuspended: isSuspended ?? this.isSuspended,
+      suspendedAt: suspendedAt ?? this.suspendedAt,
+      suspendedReason: suspendedReason ?? this.suspendedReason,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
 
@@ -127,27 +147,43 @@ class KioskOperator {
       'createdAt': createdAt.toIso8601String(),
       'lastLoginAt': lastLoginAt?.toIso8601String(),
       'avatarColorIndex': avatarColorIndex,
+      'status': status,
+      'isSuspended': isSuspended,
+      'suspendedAt': suspendedAt?.toIso8601String(),
+      'suspendedReason': suspendedReason,
+      'deletedAt': deletedAt?.toIso8601String(),
     };
   }
 
   factory KioskOperator.fromJson(Map<String, dynamic> map) {
     return KioskOperator(
       id: map['id'] as String,
-      fullName: map['fullName'] as String,
-      phone: map['phone'] as String,
+      fullName: map['fullName'] as String? ?? map['name'] as String? ?? 'Operator',
+      phone: map['phone'] as String? ?? map['mobile'] as String? ?? '',
       email: map['email'] as String?,
       role: OperatorRole.values.firstWhere(
         (r) => r.name == map['role'],
         orElse: () => OperatorRole.operator,
       ),
-      passwordHash: map['passwordHash'] as String,
-      pin: map['pin'] as String,
-      kioskName: map['kioskName'] as String,
+      passwordHash: map['passwordHash'] as String? ?? '',
+      pin: map['pin'] as String? ?? '1234',
+      kioskName: map['kioskName'] as String? ?? 'Dossier Kiosk',
       kioskAddress: map['kioskAddress'] as String?,
       merchantUpiVpa: map['merchantUpiVpa'] as String?,
-      createdAt: DateTime.parse(map['createdAt'] as String),
+      createdAt: map['createdAt'] != null
+          ? DateTime.parse(map['createdAt'] as String)
+          : DateTime.now(),
       lastLoginAt: map['lastLoginAt'] != null ? DateTime.parse(map['lastLoginAt'] as String) : null,
       avatarColorIndex: (map['avatarColorIndex'] as int?) ?? 0,
+      status: map['status'] as String? ?? 'active',
+      isSuspended: map['isSuspended'] as bool? ?? (map['is_suspended'] == 1),
+      suspendedAt: map['suspendedAt'] != null
+          ? DateTime.tryParse(map['suspendedAt'] as String)
+          : (map['suspended_at'] != null ? DateTime.tryParse(map['suspended_at'] as String) : null),
+      suspendedReason: map['suspendedReason'] as String? ?? map['suspended_reason'] as String?,
+      deletedAt: map['deletedAt'] != null
+          ? DateTime.tryParse(map['deletedAt'] as String)
+          : (map['deleted_at'] != null ? DateTime.tryParse(map['deleted_at'] as String) : null),
     );
   }
 }

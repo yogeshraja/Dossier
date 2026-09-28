@@ -203,6 +203,125 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
     }
   }
 
+  void _confirmAndDeleteAccount() {
+    final auth = ref.read(authProvider);
+    final userName = auth.user?.name ?? auth.adminOperator?.fullName ?? 'User';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => DossierDialog(
+        title: 'Delete Account Permanently',
+        icon: Icons.delete_forever_rounded,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.warning_rounded, color: Colors.redAccent, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Warning: This action is permanent and cannot be undone.',
+                        style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Are you sure you want to delete your account ($userName)? All active operator shift sessions will be terminated, and your account will be soft-deleted and deactivated on the server.',
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          DossierButton(
+            key: const ValueKey('confirm_delete_account_btn'),
+            text: 'Delete My Account Forever',
+            icon: Icons.delete_forever_rounded,
+            variant: DossierButtonVariant.danger,
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await ref.read(authProvider.notifier).deleteAccount();
+              if (success && mounted) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const AuthScreen()),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmAndSuspendOperator(KioskOperator op) {
+    final reasonCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => DossierDialog(
+        title: 'Suspend Operator: ${op.fullName}',
+        icon: Icons.block_rounded,
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Suspending ${op.fullName} will immediately block them from PIN shift login and terminate any active sessions on this kiosk.',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 14),
+              DossierInputField(
+                label: 'Reason for Suspension (Optional)',
+                hintText: 'e.g. On leave / Shift inactive',
+                controller: reasonCtrl,
+                prefixIcon: const Icon(Icons.notes_rounded, size: 18),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          DossierButton(
+            text: 'Suspend Operator',
+            icon: Icons.block_rounded,
+            variant: DossierButtonVariant.danger,
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(authProvider.notifier).suspendOperator(
+                    operatorId: op.id,
+                    suspend: true,
+                    reason: reasonCtrl.text.trim().isNotEmpty ? reasonCtrl.text.trim() : null,
+                  );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAddOperatorDialog() {
     showDialog(
       context: context,
@@ -858,6 +977,46 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               ],
             ),
           ),
+          const SizedBox(height: 18),
+
+          // 4. Danger Zone & Account Deletion
+          DossierCard(
+            variant: DossierCardVariant.outlined,
+            padding: const EdgeInsets.all(20),
+            borderColor: Colors.red.withValues(alpha: 0.35),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, size: 20, color: Colors.redAccent),
+                    SizedBox(width: 8),
+                    Text(
+                      'Danger Zone: Account Deletion',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Permanently delete your account, sign out all connected kiosk devices, and mark your profile as deleted on the server.',
+                  style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: DossierButton(
+                    key: const ValueKey('delete_account_btn'),
+                    text: 'Delete Account & Data',
+                    icon: Icons.delete_forever_rounded,
+                    variant: DossierButtonVariant.danger,
+                    size: DossierButtonSize.sm,
+                    onPressed: _confirmAndDeleteAccount,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1327,19 +1486,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            runSpacing: 4,
                             children: [
                               Text(op.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              const SizedBox(width: 8),
                               DossierBadge(
                                 label: op.role.label,
                                 variant: op.role == OperatorRole.admin ? DossierBadgeVariant.primary : DossierBadgeVariant.neutral,
                               ),
+                              if (op.isSuspended)
+                                const DossierBadge(
+                                  label: 'SUSPENDED',
+                                  variant: DossierBadgeVariant.warning,
+                                  icon: Icons.block_rounded,
+                                ),
                             ],
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            'Phone: ${op.phone.isNotEmpty ? op.phone : "None"} • PIN: •••• • Added: ${op.createdAt.toLocal().toString().substring(0, 10)}',
+                            'Phone: ${op.phone.isNotEmpty ? op.phone : "None"} • PIN: •••• • Added: ${op.createdAt.toLocal().toString().substring(0, 10)}${op.isSuspended && op.suspendedReason != null ? " • Reason: ${op.suspendedReason}" : ""}',
                             style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[600]),
                           ),
                         ],
@@ -1348,6 +1515,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (!isMasterAdmin) ...[
+                          if (op.isSuspended)
+                            IconButton(
+                              icon: const Icon(Icons.lock_open_rounded, size: 18, color: Color(0xFF10B981)),
+                              tooltip: 'Unsuspend Operator',
+                              onPressed: () async {
+                                await ref.read(authProvider.notifier).suspendOperator(
+                                      operatorId: op.id,
+                                      suspend: false,
+                                    );
+                              },
+                            )
+                          else
+                            IconButton(
+                              icon: const Icon(Icons.block_rounded, size: 18, color: Color(0xFFF59E0B)),
+                              tooltip: 'Suspend Operator',
+                              onPressed: () => _confirmAndSuspendOperator(op),
+                            ),
+                        ],
                         IconButton(
                           icon: const Icon(Icons.edit_rounded, size: 18),
                           tooltip: 'Edit Operator',

@@ -10,6 +10,7 @@ import 'package:dossier/features/auth/domain/strategies/auth_strategy_factory.da
 import 'package:dossier/features/auth/domain/strategies/email_password_auth_strategy.dart';
 import 'package:dossier/features/auth/domain/strategies/phone_password_auth_strategy.dart';
 import 'package:dossier/features/auth/domain/strategies/google_sso_auth_strategy.dart';
+import 'package:dossier/features/auth/models/operator_model.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
 import 'package:dossier/features/auth/screens/auth_screen.dart';
 
@@ -411,6 +412,191 @@ void main() {
       expect(state.isUserLoggedIn, isTrue);
       expect(state.isSoftwareActivated, isTrue);
       expect(state.adminOperator?.fullName, 'Aarav Gupta');
+    });
+
+    test('8. deleteAccount() soft-deletes user account on server and resets local state', () async {
+      bool deleteCalledOnServer = false;
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/signin') {
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'token': 'jwt-delete-test-session',
+              'hasKiosk': true,
+              'user': {
+                'id': 'usr-to-delete',
+                'name': 'Delete Me',
+                'email': 'delete@csc.in',
+                'role': 'admin',
+                'hasKiosk': true,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        } else if (request.url.path == '/api/v1/auth/user/delete') {
+          deleteCalledOnServer = true;
+          return http.Response(
+            jsonEncode({'success': true, 'message': 'Account deleted successfully'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final container = ProviderContainer(
+        overrides: [
+          serverAuthApiServiceProvider.overrideWithValue(
+            ServerAuthApiService(client: mockClient),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(authProvider.notifier);
+
+      // 1. Authenticate user first
+      final strategy = AuthStrategyFactory.createEmailStrategy(
+        email: 'delete@csc.in',
+        password: 'Password123',
+      );
+      await notifier.authenticateWithStrategy(strategy, isSignUp: false);
+      expect(container.read(authProvider).isUserLoggedIn, isTrue);
+
+      // 2. Perform account deletion
+      final success = await notifier.deleteAccount();
+      expect(success, isTrue);
+      expect(deleteCalledOnServer, isTrue);
+
+      final finalState = container.read(authProvider);
+      expect(finalState.isUserLoggedIn, isFalse);
+      expect(finalState.isSoftwareActivated, isFalse);
+      expect(finalState.currentOperator, isNull);
+    });
+
+    test('9. suspendOperator() toggles suspension state and rejects PIN login when suspended', () async {
+      String? suspendedOperatorId;
+      bool? suspensionFlag;
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/signin') {
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'token': 'jwt-admin-token',
+              'hasKiosk': true,
+              'user': {
+                'id': 'usr-admin-suspend',
+                'name': 'Admin User',
+                'email': 'admin@csc.in',
+                'role': 'admin',
+                'hasKiosk': true,
+              },
+              'operators': [
+                {
+                  'id': 'usr-admin-suspend',
+                  'name': 'Admin User',
+                  'role': 'admin',
+                  'pin': '1234',
+                }
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        } else if (request.url.path == '/api/v1/auth/operators/add') {
+          final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'operator': {
+                'id': 'op-desk-staff',
+                'name': reqBody['name'],
+                'role': reqBody['role'] ?? 'operator',
+                'pin': reqBody['pin'],
+              },
+            }),
+            201,
+            headers: {'content-type': 'application/json'},
+          );
+        } else if (request.url.path == '/api/v1/auth/user/suspend') {
+          final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
+          suspendedOperatorId = reqBody['userId'];
+          suspensionFlag = reqBody['suspend'];
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'message': 'Operator suspended successfully',
+              'isSuspended': reqBody['suspend'],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final container = ProviderContainer(
+        overrides: [
+          serverAuthApiServiceProvider.overrideWithValue(
+            ServerAuthApiService(client: mockClient),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(authProvider.notifier);
+
+      // 1. Authenticate admin user
+      final strategy = AuthStrategyFactory.createEmailStrategy(
+        email: 'admin@csc.in',
+        password: 'Password123',
+      );
+      await notifier.authenticateWithStrategy(strategy, isSignUp: false);
+
+      // 2. Create desk operator
+      final addSuccess = await notifier.addOperator(name: 'Desk Staff', pin: '5678', role: OperatorRole.operator);
+      expect(addSuccess, isTrue);
+
+      final op = container.read(authProvider).registeredOperators.firstWhere((o) => o.fullName == 'Desk Staff');
+      expect(op.isSuspended, isFalse);
+
+      // 3. Suspend operator
+      final suspendRes = await notifier.suspendOperator(
+        operatorId: op.id,
+        suspend: true,
+        reason: 'Temporary medical leave',
+      );
+      expect(suspendRes, isTrue);
+      expect(suspendedOperatorId, op.id);
+      expect(suspensionFlag, isTrue);
+
+      final suspendedOp = container.read(authProvider).registeredOperators.firstWhere((o) => o.id == op.id);
+      expect(suspendedOp.isSuspended, isTrue);
+      expect(suspendedOp.suspendedReason, 'Temporary medical leave');
+
+      // 4. Attempt shift login with suspended operator -> must fail
+      final loginSuccess = await notifier.loginOperatorWithPin(operatorId: op.id, pin: '5678');
+      expect(loginSuccess, isFalse);
+      expect(container.read(authProvider).errorMessage, contains('suspended'));
+
+      // 5. Unsuspend operator
+      final unsuspendRes = await notifier.suspendOperator(
+        operatorId: op.id,
+        suspend: false,
+      );
+      expect(unsuspendRes, isTrue);
+      expect(suspensionFlag, isFalse);
+
+      final activeOp = container.read(authProvider).registeredOperators.firstWhere((o) => o.id == op.id);
+      expect(activeOp.isSuspended, isFalse);
+
+      // 6. Attempt shift login now -> should succeed
+      final loginSuccessAfterUnsuspend = await notifier.loginOperatorWithPin(operatorId: op.id, pin: '5678');
+      expect(loginSuccessAfterUnsuspend, isTrue);
+      expect(container.read(authProvider).currentOperator?.id, op.id);
     });
   });
 }
