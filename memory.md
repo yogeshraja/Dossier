@@ -1,7 +1,7 @@
 # Project State & Memory: Dossier CRM & Kiosk Vault
 
 **Last Updated:** 2026-09-28  
-**Status:** Admin-Only Operator Provisioning & Dedicated User Settings Page Implemented & Verified (40/40 tests passing, 0 analyzer issues)
+**Status:** Multi-Step FTUE Onboarding Wizard & Returning Sign-In Bypass Implemented & Verified (42/42 tests passing, 0 analyzer issues)
 
 ---
 
@@ -11,6 +11,16 @@
   - `apps/web/`: Web marketing landing page & interactive documentation portal (Vite + Vanilla CSS/JS).
   - `services/api/`: Cloudflare Workers + D1 SQLite + Hono serverless backend.
   - Root: `mise.toml` toolchain version manager and `package.json` task orchestration.
+
+### FTUE (First-Time User Experience) & Sign-In vs Sign-Up Handling
+1. **Returning Sign-In Bypass:**
+   - When returning users sign in (`isSignUp: false`), active kiosk state is preserved / restored immediately, bypassing kiosk setup and launching directly into the workstation or shift screen.
+2. **Interactive 3-Step FTUE Onboarding Wizard:**
+   - Displayed only when a new user signs up or configures a new kiosk tenant:
+     - **Step 1 (Identity & Branding):** Center Name, Street Address, Customer Support contact.
+     - **Step 2 (Touch POS & Payments):** Dynamic Merchant UPI VPA ID, Thermal Receipt Paper Width (`58mm` vs `80mm`), Auto Cash Drawer Kick Pulse toggle.
+     - **Step 3 (Security & Master Admin PIN):** 4-digit Master PIN and confirmation with live summary card before activating the workstation.
+   - Stepper Header with visual progress badges (`1. Identity`, `2. POS & UPI`, `3. Security PIN`) and zero RenderFlex overflows across all viewport widths.
 
 ### Dedicated User Profile & Admin-Only Operator Management
 1. **Admin-Only Operator Access Gate:**
@@ -28,7 +38,7 @@
 ---
 
 ## 2. Testing & Quality Assurance
-- **Total Tests:** 40/40 unit, integration, and widget tests passing (100% pass rate).
+- **Total Tests:** 42/42 unit, integration, and widget tests passing (100% pass rate).
 - **Analyzer Status:** 0 errors, 0 warnings, 0 lints (`flutter analyze` clean).
 - **Backend Status:** Cloudflare Workers TypeScript build clean (`tsc --noEmit`).
 
@@ -41,7 +51,3 @@
 - `mise run dev:web` -> starts local Vite docs & marketing portal server.
 - `mise run dev:kiosk` -> launches Flutter Web in Chrome.
 
----
-
-## 4. Commit History
-- `[HEAD] 1a8a048`: `feat(web,auth): add docs website portal, software activation gate & two-tier operator auth`
