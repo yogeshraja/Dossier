@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL DEFAULT 'operator', -- 'admin', 'manager', 'operator'
     pin_hash TEXT NOT NULL,
     password_hash TEXT,
+    auth_provider TEXT DEFAULT 'local', -- 'email', 'mobile', 'google', 'local'
+    google_id TEXT,
+    avatar_url TEXT,
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,

@@ -330,9 +330,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('Software Activation'), findsOneWidget);
-      expect(find.text('Register New Kiosk'), findsOneWidget);
-      expect(find.text('Sign In Existing Admin'), findsOneWidget);
+      expect(find.text('Welcome Back'), findsOneWidget);
+      expect(find.text('Sign In'), findsOneWidget);
+      expect(find.text('Sign Up'), findsOneWidget);
+      expect(find.text('Continue with Google'), findsOneWidget);
     });
 
     testWidgets('AuthScreen renders on Mobile (390x844) with 0 overflows', (WidgetTester tester) async {
@@ -351,9 +352,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('Software Activation'), findsOneWidget);
-      expect(find.text('Register New Kiosk'), findsOneWidget);
-      expect(find.text('Sign In Existing Admin'), findsOneWidget);
+      expect(find.text('Welcome Back'), findsOneWidget);
+      expect(find.text('Continue with Google'), findsOneWidget);
     });
 
     testWidgets('AuthScreen renders on Tablet (768x1024) with 0 overflows', (WidgetTester tester) async {
@@ -372,8 +372,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('Software Activation'), findsOneWidget);
-      expect(find.text('Register New Kiosk'), findsOneWidget);
+      expect(find.text('Welcome Back'), findsOneWidget);
+      expect(find.text('Continue with Google'), findsOneWidget);
     });
 
     testWidgets('AuthScreen renders on Small Mobile (320x600) with 0 overflows', (WidgetTester tester) async {
@@ -392,10 +392,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('Software Activation'), findsOneWidget);
+      expect(find.text('Welcome Back'), findsOneWidget);
     });
 
-    testWidgets('AuthScreen switches between Register New Kiosk and Sign In Existing Admin tabs', (WidgetTester tester) async {
+    testWidgets('AuthScreen switches between Sign In and Sign Up tabs', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -410,17 +410,16 @@ void main() {
 
       await tester.pump();
 
-      // Verify register mode fields
-      expect(find.text('Register New Kiosk'), findsOneWidget);
-      expect(find.text('Kiosk Center Name'), findsOneWidget);
-      expect(find.text('Admin Full Name'), findsOneWidget);
+      // Initially on Sign In
+      expect(find.text('Welcome Back'), findsOneWidget);
+      expect(find.text('Email Address'), findsOneWidget);
 
-      // Switch to Sign In Existing Admin
-      await tester.tap(find.text('Sign In Existing Admin'));
-      await tester.pump(const Duration(milliseconds: 300));
+      // Switch to Sign Up
+      await tester.tap(find.text('Sign Up'));
+      await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('Admin Mobile / Email'), findsOneWidget);
-      expect(find.text('Sign In & Activate'), findsOneWidget);
+      expect(find.text('Create Account'), findsOneWidget);
+      expect(find.text('Full Name'), findsOneWidget);
     });
 
     testWidgets('AuthScreen renders Operator Shift Login when software is activated', (WidgetTester tester) async {
@@ -458,19 +457,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('City CSC Center'), findsOneWidget);
-      expect(find.text('Select Desk Operator'), findsOneWidget);
+      expect(find.text('Operator Shift Sign-In'), findsOneWidget);
       expect(find.text('1'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
       expect(find.text('3'), findsOneWidget);
 
-      // Tap PIN digits and clear key
+      // Tap PIN digits
       await tester.tap(find.text('1'));
       await tester.pump();
       await tester.tap(find.text('2'));
-      await tester.pump();
-      await tester.tap(find.text('3'));
-      await tester.pump();
-      await tester.tap(find.text('C'));
       await tester.pump();
     });
 

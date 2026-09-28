@@ -11,25 +11,26 @@
   - `services/api/`: Cloudflare Workers + D1 SQLite + Hono serverless backend.
   - Root: `mise.toml` toolchain version manager and `package.json` task orchestration.
 
-### Two-Tier Operator Authentication & Software Activation Gate
-1. **Tier 1 (Admin Software Activation):**
-   - Software starts unactivated/locked.
-   - Master Admin logs in or registers on the remote Cloudflare backend (`/api/v1/auth/activate`).
-   - Activation establishes master kiosk identity, stores cloud tenant credentials, and unlocks app features.
-2. **Tier 2 (Operator Shift PIN Login):**
-   - Once activated, counter staff switch and log in quickly with 4-digit PINs (`/api/v1/auth/operator-login`).
-   - Admin can provision new operators (`/api/v1/auth/operators`), synced directly to Cloudflare D1 and cached locally in Drift SQLite for instant offline availability.
-3. **Web-First Design & Progressive Local Enhancement Mandate:**
-   - App UI and interaction flows are designed web-first (WASM + OPFS).
-   - Desktop and Mobile native builds function as progressive enhancements utilizing native C-FFI SQLite drivers, direct raw ESC/POS thermal printer byte buffers, and background Dart isolates.
+### OOP Authentication Strategy & Multi-Step Kiosk Registration Flow
+1. **Inheritance-Based Auth Strategy Hierarchy:**
+   - Base interface `AuthStrategy` and abstract base class `BaseAuthStrategy` with template validation & execution.
+   - Specific implementations: `EmailPasswordAuthStrategy`, `PhonePasswordAuthStrategy`, and `GoogleSsoAuthStrategy` (Google SSO).
+   - Resolved via `AuthStrategyFactory`.
+2. **Step 1: User Login / Sign-Up:**
+   - App opens with user authentication screen supporting Email/Password, Mobile/Password, and Google SSO.
+3. **Step 2: Kiosk Product Registration & Activation:**
+   - Once authenticated as Admin, if the kiosk is not yet registered on the device, user completes Kiosk Center Name, Address, Merchant UPI VPA, and 4-digit Master PIN.
+   - Dispatches `/api/v1/auth/kiosk/register` to Cloudflare D1 edge backend and unlocks full CRM/POS capabilities.
+4. **Step 3: Daily Desk Operator Shift PIN Login:**
+   - Staff switch between operator avatars with 4-digit touch PINs.
 
 ---
 
 ## 2. Testing & Quality Assurance
-- **Total Tests:** 42/42 unit, integration, and widget tests passing (100% pass rate).
-  - `apps/kiosk/test/auth_server_test.dart` (3 tests: activation, operator provisioning, shift PIN login).
+- **Total Tests:** 43/43 unit, integration, and widget tests passing (100% pass rate).
+  - `apps/kiosk/test/auth_server_test.dart` (4 tests: email strategy, phone strategy, Google SSO strategy, full login -> kiosk registration -> shift login flow).
   - `apps/kiosk/test/modernization_test.dart` (9 tests: glassmorphism, command palette, sparklines, thermal receipt).
-  - `apps/kiosk/test/widget_test.dart` (30 tests: responsive layout breakpoints from 320px to 1440px, workflows).
+  - `apps/kiosk/test/widget_test.dart` (30 tests: responsive layout breakpoints from 320px to 1440px with 0 RenderFlex overflows).
 - **Analyzer Status:** 0 errors, 0 warnings, 0 lints (`flutter analyze` clean).
 - **Backend Status:** Cloudflare Workers TypeScript build clean (`tsc --noEmit`).
 

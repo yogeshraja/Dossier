@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/data/remote/auth/server_auth_api_service.dart';
+import 'package:dossier/features/auth/domain/models/auth_user.dart';
+import 'package:dossier/features/auth/domain/strategies/auth_strategy.dart';
+import 'package:dossier/features/auth/domain/strategies/auth_strategy_factory.dart';
 import 'package:dossier/features/auth/models/operator_model.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
 
@@ -8,6 +11,7 @@ final serverAuthApiServiceProvider = Provider<ServerAuthApiService>((ref) {
 });
 
 class AuthState {
+  final AuthUser? user;
   final bool isSoftwareActivated;
   final KioskOperator? adminOperator;
   final List<KioskOperator> registeredOperators;
@@ -23,6 +27,7 @@ class AuthState {
   final String serverUrl;
 
   const AuthState({
+    this.user,
     this.isSoftwareActivated = false,
     this.adminOperator,
     this.registeredOperators = const [],
@@ -39,8 +44,10 @@ class AuthState {
   });
 
   bool get hasRegisteredOperators => registeredOperators.isNotEmpty;
+  bool get isUserLoggedIn => isAuthenticated && user != null;
 
   AuthState copyWith({
+    AuthUser? user,
     bool? isSoftwareActivated,
     KioskOperator? adminOperator,
     List<KioskOperator>? registeredOperators,
@@ -54,11 +61,13 @@ class AuthState {
     bool? isServerConnected,
     bool? isOfflineMode,
     String? serverUrl,
+    bool clearUser = false,
     bool clearCurrentOperator = false,
     bool clearAdminOperator = false,
     bool clearErrorMessage = false,
   }) {
     return AuthState(
+      user: clearUser ? null : (user ?? this.user),
       isSoftwareActivated: isSoftwareActivated ?? this.isSoftwareActivated,
       adminOperator: clearAdminOperator ? null : (adminOperator ?? this.adminOperator),
       registeredOperators: registeredOperators ?? this.registeredOperators,
@@ -102,7 +111,166 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return connected;
   }
 
-  /// Step 1: Admin Software Activation (Sign-Up / Sign-In with Remote Server)
+  /// 1. User Authentication via Strategy (Email, Phone, Google SSO)
+  Future<bool> authenticateWithStrategy(
+    AuthStrategy strategy, {
+    required bool isSignUp,
+  }) async {
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
+
+    final result = await _serverAuthApi.authenticateWithStrategy(
+      strategy,
+      isSignUp: isSignUp,
+    );
+
+    if (result.isSuccess && result.user != null) {
+      final user = result.user!;
+      final hasKiosk = result.hasKiosk;
+
+      List<KioskOperator> ops = result.operators;
+      KioskOperator? adminOp;
+      if (hasKiosk && ops.isNotEmpty) {
+        adminOp = ops.first;
+      }
+
+      state = state.copyWith(
+        user: user,
+        isAuthenticated: true,
+        isSoftwareActivated: hasKiosk,
+        adminOperator: adminOp,
+        registeredOperators: ops,
+        serverAuthToken: result.token,
+        isLoading: false,
+        clearErrorMessage: true,
+      );
+
+      if (hasKiosk && adminOp != null) {
+        _updateOperatorState(adminOp);
+      }
+
+      return true;
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: result.errorMessage ?? 'Authentication failed',
+      );
+      return false;
+    }
+  }
+
+  /// 2. Kiosk Setup & Product Registration (Software Activation)
+  Future<bool> registerKioskAndActivate({
+    required String kioskName,
+    String? kioskAddress,
+    String? merchantUpiVpa,
+    required String pin,
+  }) async {
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
+
+    final cleanKiosk = kioskName.trim();
+    final cleanPin = pin.trim();
+
+    if (cleanKiosk.isEmpty || cleanPin.length != 4) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Kiosk name and 4-digit numeric PIN are required.',
+      );
+      return false;
+    }
+
+    final userId = state.user?.id ?? 'usr_${DateTime.now().millisecondsSinceEpoch}';
+
+    final result = await _serverAuthApi.registerKioskAndActivate(
+      userId: userId,
+      kioskName: cleanKiosk,
+      kioskAddress: kioskAddress,
+      merchantUpiVpa: merchantUpiVpa,
+      pin: cleanPin,
+    );
+
+    if (result.isSuccess && result.operator != null) {
+      final admin = result.operator!;
+      final operators = result.operators.isNotEmpty ? result.operators : [admin];
+
+      state = state.copyWith(
+        isSoftwareActivated: true,
+        adminOperator: admin,
+        registeredOperators: operators,
+        serverAuthToken: result.token,
+        isOfflineMode: result.isOfflineFallback,
+        isServerConnected: !result.isOfflineFallback,
+        isLoading: false,
+      );
+
+      _updateOperatorState(admin);
+      return true;
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: result.errorMessage ?? 'Failed to register kiosk and activate software.',
+      );
+      return false;
+    }
+  }
+
+  /// Convenience Sign-In with credentials
+  Future<bool> signInWithCredentials({
+    required String identifier,
+    required String password,
+  }) async {
+    final cleanId = identifier.trim().toLowerCase().replaceAll(RegExp(r'[\s\-+]'), '');
+    final cleanPwd = password.trim();
+
+    // 1. Check local registered operators if software is active
+    if (state.registeredOperators.isNotEmpty) {
+      final matched = state.registeredOperators.where((op) {
+        final opPhone = op.phone.replaceAll(RegExp(r'[\s\-+]'), '');
+        final opEmail = op.email?.toLowerCase().trim() ?? '';
+        final idMatch = opPhone == cleanId || opPhone.endsWith(cleanId) || opEmail == cleanId;
+        final pwdMatch = op.passwordHash == cleanPwd || op.pin == cleanPwd;
+        return idMatch && pwdMatch;
+      }).toList();
+
+      if (matched.isNotEmpty) {
+        final operator = matched.first.copyWith(lastLoginAt: DateTime.now());
+        _updateOperatorState(operator);
+        return true;
+      }
+    }
+
+    final strategy = identifier.contains('@')
+        ? AuthStrategyFactory.createEmailStrategy(email: identifier, password: password)
+        : AuthStrategyFactory.createPhoneStrategy(phone: identifier, password: password);
+
+    return authenticateWithStrategy(strategy, isSignUp: false);
+  }
+
+  /// Convenience Sign-Up (Master Activation / Direct Registration)
+  Future<bool> signUp({
+    required String kioskName,
+    required String operatorName,
+    required String phone,
+    String? email,
+    required String password,
+    required String pin,
+    OperatorRole role = OperatorRole.admin,
+    String? merchantUpiVpa,
+    String? kioskAddress,
+  }) async {
+    return activateSoftware(
+      adminName: operatorName,
+      phone: phone,
+      email: email,
+      password: password,
+      pin: pin,
+      kioskName: kioskName,
+      kioskAddress: kioskAddress,
+      merchantUpiVpa: merchantUpiVpa,
+      isNewRegistration: true,
+    );
+  }
+
+  /// Backward compatible master activation
   Future<bool> activateSoftware({
     required String adminName,
     required String phone,
@@ -144,13 +312,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final admin = result.operator!;
       final operators = result.operators.isNotEmpty ? result.operators : [admin];
 
+      final authUser = AuthUser(
+        id: admin.id,
+        name: admin.fullName,
+        email: admin.email,
+        phone: admin.phone,
+        hasKiosk: true,
+        role: 'admin',
+      );
+
       state = state.copyWith(
+        user: authUser,
+        isAuthenticated: true,
         isSoftwareActivated: true,
         adminOperator: admin,
         registeredOperators: operators,
         serverAuthToken: result.token,
         isOfflineMode: result.isOfflineFallback,
         isServerConnected: !result.isOfflineFallback,
+        isLoading: false,
       );
 
       _updateOperatorState(admin);
@@ -164,7 +344,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Step 2: Provision a new desk operator on server & local cache (Admin only)
+  /// Provision a new desk operator
   Future<bool> addOperator({
     required String name,
     required String pin,
@@ -186,16 +366,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     final token = state.serverAuthToken ?? 'offline-token';
-    final kioskName = state.adminOperator?.kioskName ?? 'Dossier Kiosk';
 
     final result = await _serverAuthApi.createOperatorOnServer(
-      token: token,
+      authToken: token,
       name: cleanName,
       pin: cleanPin,
       role: role,
       phone: phone,
       email: email,
-      kioskName: kioskName,
     );
 
     if (result.isSuccess && result.operator != null) {
@@ -217,7 +395,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Step 3: Operator Shift Login (Select Operator + Enter 4-digit PIN)
+  /// Operator Shift Login (Select Operator + Enter 4-digit PIN)
   Future<bool> loginOperatorWithPin({
     required String operatorId,
     required String pin,
@@ -246,8 +424,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (op.pin == cleanPin) {
       final updatedOp = op.copyWith(lastLoginAt: DateTime.now());
       _updateOperatorState(updatedOp);
-
-      // Async server notification
       _serverAuthApi.operatorLogin(operatorId: op.id, pin: cleanPin).ignore();
       return true;
     }
@@ -264,74 +440,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       errorMessage: 'Incorrect 4-digit PIN for ${op.fullName}.',
     );
     return false;
-  }
-
-  /// Convenience Sign-In for Admin / Operator with Credentials
-  Future<bool> signInWithCredentials({
-    required String identifier,
-    required String password,
-  }) async {
-    if (!state.isSoftwareActivated) {
-      return activateSoftware(
-        adminName: 'Admin',
-        phone: identifier,
-        email: identifier.contains('@') ? identifier : null,
-        password: password,
-        pin: password.length == 4 && RegExp(r'^\d{4}$').hasMatch(password) ? password : '1234',
-        kioskName: 'Dossier Kiosk',
-        isNewRegistration: false,
-      );
-    }
-
-    // If software is already activated, find matching operator
-    state = state.copyWith(isLoading: true, clearErrorMessage: true);
-    final cleanId = identifier.trim().toLowerCase().replaceAll(RegExp(r'[\s\-+]'), '');
-    final cleanPwd = password.trim();
-
-    final matched = state.registeredOperators.where((op) {
-      final opPhone = op.phone.replaceAll(RegExp(r'[\s\-+]'), '');
-      final opEmail = op.email?.toLowerCase().trim() ?? '';
-      final idMatch = opPhone == cleanId || opPhone.endsWith(cleanId) || opEmail == cleanId;
-      final pwdMatch = op.passwordHash == cleanPwd || op.pin == cleanPwd;
-      return idMatch && pwdMatch;
-    }).toList();
-
-    if (matched.isNotEmpty) {
-      final operator = matched.first.copyWith(lastLoginAt: DateTime.now());
-      _updateOperatorState(operator);
-      return true;
-    }
-
-    state = state.copyWith(
-      isLoading: false,
-      errorMessage: 'Invalid mobile number/email or password/PIN.',
-    );
-    return false;
-  }
-
-  /// Convenience Sign-Up (Master Activation)
-  Future<bool> signUp({
-    required String kioskName,
-    required String operatorName,
-    required String phone,
-    String? email,
-    required String password,
-    required String pin,
-    OperatorRole role = OperatorRole.admin,
-    String? merchantUpiVpa,
-    String? kioskAddress,
-  }) async {
-    return activateSoftware(
-      adminName: operatorName,
-      phone: phone,
-      email: email,
-      password: password,
-      pin: pin,
-      kioskName: kioskName,
-      kioskAddress: kioskAddress,
-      merchantUpiVpa: merchantUpiVpa,
-      isNewRegistration: true,
-    );
   }
 
   /// Lock Session with PIN Screen
@@ -369,47 +477,41 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
-  /// Deactivate software completely (returns to Admin Activation screen)
-  void resetKioskActivation() {
-    state = state.copyWith(
-      isSoftwareActivated: false,
-      isAuthenticated: false,
-      isPinLocked: false,
-      serverAuthToken: null,
-      clearAdminOperator: true,
-      clearCurrentOperator: true,
-      registeredOperators: [],
-      clearErrorMessage: true,
-    );
-  }
-
-  void toggleRememberMe(bool value) {
-    state = state.copyWith(rememberMe: value);
-  }
-
-  void clearError() {
-    state = state.copyWith(clearErrorMessage: true);
+  /// Sign out entire account / user
+  void signOut() {
+    state = const AuthState();
   }
 
   void _updateOperatorState(KioskOperator operator) {
-    ref.read(kioskSettingsProvider.notifier).updateKioskInfo(
-          name: operator.kioskName,
-          address: operator.kioskAddress ?? '',
-          phone: operator.phone,
-          upiVpa: operator.merchantUpiVpa ?? 'csckiosk@oksbi',
-        );
+    final updatedList = state.registeredOperators.map((o) {
+      return o.id == operator.id ? operator : o;
+    }).toList();
+
+    if (!updatedList.any((o) => o.id == operator.id)) {
+      updatedList.add(operator);
+    }
 
     state = state.copyWith(
       currentOperator: operator,
+      adminOperator: operator.role == OperatorRole.admin ? operator : state.adminOperator,
+      registeredOperators: updatedList,
       isAuthenticated: true,
       isPinLocked: false,
       isLoading: false,
       clearErrorMessage: true,
     );
+
+    // Sync kiosk business settings
+    ref.read(kioskSettingsProvider.notifier).updateKioskInfo(
+          name: operator.kioskName,
+          address: operator.kioskAddress ?? 'Local CSC Center',
+          phone: operator.phone,
+          upiVpa: operator.merchantUpiVpa ?? 'csckiosk@oksbi',
+        );
   }
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  final serverAuthApi = ref.watch(serverAuthApiServiceProvider);
-  return AuthNotifier(ref, serverAuthApi);
+  final serverApi = ref.watch(serverAuthApiServiceProvider);
+  return AuthNotifier(ref, serverApi);
 });

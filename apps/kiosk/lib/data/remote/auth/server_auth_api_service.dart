@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
+import 'package:dossier/features/auth/domain/models/auth_user.dart';
+import 'package:dossier/features/auth/domain/strategies/auth_strategy.dart';
 import 'package:dossier/features/auth/models/operator_model.dart';
 
 class ServerAuthResult {
   final bool isSuccess;
   final String? token;
+  final AuthUser? user;
   final KioskOperator? operator;
   final List<KioskOperator> operators;
   final String? errorMessage;
@@ -16,6 +19,7 @@ class ServerAuthResult {
   const ServerAuthResult({
     required this.isSuccess,
     this.token,
+    this.user,
     this.operator,
     this.operators = const [],
     this.errorMessage,
@@ -26,6 +30,7 @@ class ServerAuthResult {
 
   factory ServerAuthResult.success({
     required String token,
+    AuthUser? user,
     required KioskOperator operator,
     List<KioskOperator> operators = const [],
     Map<String, dynamic>? tenantSettings,
@@ -35,6 +40,7 @@ class ServerAuthResult {
     return ServerAuthResult(
       isSuccess: true,
       token: token,
+      user: user,
       operator: operator,
       operators: operators,
       tenantSettings: tenantSettings,
@@ -53,7 +59,7 @@ class ServerAuthResult {
 }
 
 /// Remote Authentication API Service for Dossier Server Backend.
-/// Handles kiosk software activation, operator management, and desk shift logins.
+/// Handles user login/signup via strategies, kiosk product registration, and desk shift logins.
 class ServerAuthApiService {
   final String baseUrl;
   final http.Client _client;
@@ -63,7 +69,140 @@ class ServerAuthApiService {
     http.Client? client,
   }) : _client = client ?? http.Client();
 
-  /// Activate Software on this Device (Admin Sign-Up or Sign-In)
+  /// Check server health
+  Future<bool> checkServerHealth() async {
+    try {
+      final res = await _client.get(Uri.parse('$baseUrl/api/v1/auth/health')).timeout(const Duration(seconds: 4));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Authenticate using an AuthStrategy (Email, Phone, Google SSO)
+  Future<StrategyAuthResult> authenticateWithStrategy(
+    AuthStrategy strategy, {
+    required bool isSignUp,
+  }) async {
+    return await strategy.authenticate(
+      baseUrl: baseUrl,
+      isSignUp: isSignUp,
+      client: _client,
+    );
+  }
+
+  /// Register Kiosk & Activate Software on this Device
+  Future<ServerAuthResult> registerKioskAndActivate({
+    required String userId,
+    required String kioskName,
+    String? kioskAddress,
+    String? merchantUpiVpa,
+    required String pin,
+  }) async {
+    final cleanKiosk = kioskName.trim();
+    final cleanPin = pin.trim();
+
+    final payload = {
+      'userId': userId,
+      'kioskName': cleanKiosk,
+      'kioskAddress': kioskAddress?.trim(),
+      'merchantUpiVpa': merchantUpiVpa?.trim().isNotEmpty == true ? merchantUpiVpa!.trim() : 'csckiosk@oksbi',
+      'pin': cleanPin,
+      'clientTimestamp': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/auth/kiosk/register');
+      final response = await _client
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final token = data['activationToken'] as String? ?? 'dossier-jwt-${const Uuid().v4()}';
+        final adminData = data['admin'] as Map<String, dynamic>? ?? {};
+        final kioskData = data['kiosk'] as Map<String, dynamic>? ?? {};
+        final rawOperators = data['operators'] as List<dynamic>? ?? [];
+
+        final adminOperator = KioskOperator(
+          id: adminData['id'] as String? ?? userId,
+          fullName: adminData['name'] as String? ?? 'Admin',
+          phone: adminData['mobile'] as String? ?? '',
+          email: adminData['email'] as String?,
+          role: OperatorRole.admin,
+          passwordHash: '',
+          pin: cleanPin,
+          kioskName: kioskData['name'] as String? ?? cleanKiosk,
+          kioskAddress: kioskData['address'] as String? ?? kioskAddress?.trim(),
+          merchantUpiVpa: kioskData['merchantUpiVpa'] as String? ?? merchantUpiVpa?.trim(),
+          createdAt: DateTime.now(),
+          lastLoginAt: DateTime.now(),
+        );
+
+        final parsedOperators = rawOperators.map<KioskOperator>((item) {
+          final map = item as Map<String, dynamic>;
+          final r = map['role'] == 'admin'
+              ? OperatorRole.admin
+              : (map['role'] == 'manager' ? OperatorRole.manager : OperatorRole.operator);
+          return KioskOperator(
+            id: map['id'] as String,
+            fullName: map['name'] as String? ?? 'Operator',
+            phone: map['mobile'] as String? ?? '',
+            email: map['email'] as String?,
+            role: r,
+            passwordHash: '',
+            pin: map['pin'] as String? ?? cleanPin,
+            kioskName: cleanKiosk,
+            createdAt: DateTime.now(),
+          );
+        }).toList();
+
+        if (parsedOperators.isEmpty) {
+          parsedOperators.add(adminOperator);
+        }
+
+        return ServerAuthResult.success(
+          token: token,
+          operator: adminOperator,
+          operators: parsedOperators,
+          tenantSettings: kioskData,
+          isActivated: true,
+        );
+      } else {
+        final data = jsonDecode(response.body) as Map<String, dynamic>?;
+        final errorMsg = data?['error'] as String? ?? 'Kiosk registration failed (${response.statusCode})';
+        return ServerAuthResult.failure(errorMsg);
+      }
+    } catch (e) {
+      final fallbackAdmin = KioskOperator(
+        id: userId,
+        fullName: 'Admin (Offline)',
+        phone: '',
+        role: OperatorRole.admin,
+        passwordHash: '',
+        pin: cleanPin,
+        kioskName: cleanKiosk,
+        kioskAddress: kioskAddress,
+        merchantUpiVpa: merchantUpiVpa,
+        createdAt: DateTime.now(),
+      );
+
+      return ServerAuthResult.success(
+        token: 'offline-activation-token-${const Uuid().v4().substring(0, 8)}',
+        operator: fallbackAdmin,
+        operators: [fallbackAdmin],
+        tenantSettings: {'name': cleanKiosk, 'address': kioskAddress, 'merchantUpiVpa': merchantUpiVpa},
+        isOfflineFallback: true,
+        isActivated: true,
+      );
+    }
+  }
+
+  /// Activate Software on this Device (Legacy / Direct)
   Future<ServerAuthResult> activateSoftware({
     required String adminName,
     required String phone,
@@ -159,63 +298,64 @@ class ServerAuthApiService {
         return ServerAuthResult.failure(errorMsg);
       }
     } catch (e) {
-      // Offline fallback: activate locally
-      const uuid = Uuid();
-      final localAdmin = KioskOperator(
-        id: 'adm-${uuid.v4().substring(0, 8)}',
-        fullName: cleanName,
+      final fallbackAdmin = KioskOperator(
+        id: 'adm-offline-${const Uuid().v4().substring(0, 8)}',
+        fullName: cleanName.isNotEmpty ? cleanName : 'Main Admin',
         phone: cleanPhone,
-        email: email?.trim().isNotEmpty ?? false ? email!.trim() : null,
+        email: email?.trim(),
         role: OperatorRole.admin,
         passwordHash: password.trim(),
         pin: pin.trim(),
         kioskName: cleanKiosk,
         kioskAddress: kioskAddress?.trim(),
-        merchantUpiVpa: merchantUpiVpa?.trim().isNotEmpty ?? false ? merchantUpiVpa!.trim() : 'csckiosk@oksbi',
+        merchantUpiVpa: merchantUpiVpa?.trim(),
         createdAt: DateTime.now(),
         lastLoginAt: DateTime.now(),
       );
 
       return ServerAuthResult.success(
-        token: 'offline-activation-token-${uuid.v4()}',
-        operator: localAdmin,
-        operators: [localAdmin],
+        token: 'offline-token-${const Uuid().v4()}',
+        operator: fallbackAdmin,
+        operators: [fallbackAdmin],
+        tenantSettings: {'name': cleanKiosk, 'address': kioskAddress, 'merchantUpiVpa': merchantUpiVpa},
         isOfflineFallback: true,
         isActivated: true,
       );
     }
   }
 
-  /// Create a new Operator on remote server
+  /// Provision a new operator on remote server
   Future<ServerAuthResult> createOperatorOnServer({
-    required String token,
     required String name,
     required String pin,
-    required OperatorRole role,
+    OperatorRole role = OperatorRole.operator,
     String? phone,
     String? email,
-    required String kioskName,
+    String? kioskId,
+    String? kioskName,
+    String? authToken,
+    String? token,
   }) async {
+    final actualToken = authToken ?? token;
     final payload = {
       'name': name.trim(),
       'pin': pin.trim(),
       'role': role.name,
       'mobile': phone?.trim(),
       'email': email?.trim(),
+      'kioskId': kioskId,
     };
 
     try {
       final uri = Uri.parse('$baseUrl/api/v1/auth/operators');
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (actualToken != null) 'Authorization': 'Bearer $actualToken',
+      };
+
       final response = await _client
-          .post(
-            uri,
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode(payload),
-          )
+          .post(uri, headers: headers, body: jsonEncode(payload))
           .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -225,74 +365,78 @@ class ServerAuthApiService {
         final newOp = KioskOperator(
           id: opData['id'] as String? ?? 'op-${const Uuid().v4().substring(0, 8)}',
           fullName: opData['name'] as String? ?? name.trim(),
-          phone: opData['mobile'] as String? ?? (phone ?? ''),
-          email: opData['email'] as String? ?? email,
+          phone: opData['mobile'] as String? ?? phone?.trim() ?? '',
+          email: opData['email'] as String? ?? email?.trim(),
           role: role,
           passwordHash: '',
           pin: pin.trim(),
-          kioskName: kioskName,
+          kioskName: kioskName ?? 'Dossier Kiosk',
           createdAt: DateTime.now(),
         );
 
         return ServerAuthResult.success(
-          token: token,
+          token: actualToken ?? '',
           operator: newOp,
+          operators: [newOp],
         );
       } else {
         final data = jsonDecode(response.body) as Map<String, dynamic>?;
-        return ServerAuthResult.failure(data?['error'] as String? ?? 'Failed to create operator on server.');
+        return ServerAuthResult.failure(data?['error'] as String? ?? 'Failed to create operator');
       }
     } catch (e) {
-      // Local fallback
-      final localOp = KioskOperator(
-        id: 'op-${const Uuid().v4().substring(0, 8)}',
+      final offlineOp = KioskOperator(
+        id: 'op-local-${const Uuid().v4().substring(0, 8)}',
         fullName: name.trim(),
         phone: phone?.trim() ?? '',
         email: email?.trim(),
         role: role,
         passwordHash: '',
         pin: pin.trim(),
-        kioskName: kioskName,
+        kioskName: kioskName ?? 'Dossier Kiosk',
         createdAt: DateTime.now(),
       );
-      return ServerAuthResult.success(token: token, operator: localOp, isOfflineFallback: true);
+
+      return ServerAuthResult.success(
+        token: actualToken ?? '',
+        operator: offlineOp,
+        operators: [offlineOp],
+        isOfflineFallback: true,
+      );
     }
   }
 
-  /// Operator Desk Shift Login with PIN
+  /// Operator shift PIN login
   Future<ServerAuthResult> operatorLogin({
     required String operatorId,
     required String pin,
   }) async {
+    final payload = {
+      'operatorId': operatorId.trim(),
+      'pin': pin.trim(),
+      'clientTimestamp': DateTime.now().toIso8601String(),
+    };
+
     try {
       final uri = Uri.parse('$baseUrl/api/v1/auth/operator-login');
       final response = await _client
           .post(
             uri,
             headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-            body: jsonEncode({
-              'operatorId': operatorId.trim(),
-              'pin': pin.trim(),
-            }),
+            body: jsonEncode(payload),
           )
-          .timeout(const Duration(seconds: 6));
+          .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final token = data['token'] as String? ?? 'op-jwt-${const Uuid().v4()}';
+        final token = data['token'] as String? ?? 'shift-jwt-${const Uuid().v4()}';
         final opData = data['operator'] as Map<String, dynamic>? ?? {};
-
-        final roleStr = opData['role'] as String? ?? 'operator';
-        final role = roleStr == 'admin'
-            ? OperatorRole.admin
-            : (roleStr == 'manager' ? OperatorRole.manager : OperatorRole.operator);
 
         final op = KioskOperator(
           id: opData['id'] as String? ?? operatorId,
-          fullName: opData['name'] as String? ?? 'Desk Operator',
+          fullName: opData['name'] as String? ?? 'Operator',
           phone: opData['mobile'] as String? ?? '',
           email: opData['email'] as String?,
-          role: role,
+          role: opData['role'] == 'admin' ? OperatorRole.admin : OperatorRole.operator,
           passwordHash: '',
           pin: pin.trim(),
           kioskName: 'Dossier Kiosk',
@@ -300,71 +444,34 @@ class ServerAuthApiService {
           lastLoginAt: DateTime.now(),
         );
 
-        return ServerAuthResult.success(token: token, operator: op);
+        return ServerAuthResult.success(
+          token: token,
+          operator: op,
+          operators: [op],
+        );
       } else {
         final data = jsonDecode(response.body) as Map<String, dynamic>?;
-        return ServerAuthResult.failure(data?['error'] as String? ?? 'Incorrect PIN');
+        return ServerAuthResult.failure(data?['error'] as String? ?? 'Invalid Operator PIN');
       }
     } catch (e) {
-      return ServerAuthResult.failure('Server offline for operator login', isOffline: true);
-    }
-  }
-
-  /// Sign up convenience wrapper (calls activateSoftware)
-  Future<ServerAuthResult> signUp({
-    required String kioskName,
-    required String operatorName,
-    required String phone,
-    String? email,
-    required String password,
-    required String pin,
-    OperatorRole role = OperatorRole.admin,
-    String? merchantUpiVpa,
-    String? kioskAddress,
-  }) =>
-      activateSoftware(
-        adminName: operatorName,
-        phone: phone,
-        email: email,
-        password: password,
-        pin: pin,
-        kioskName: kioskName,
-        kioskAddress: kioskAddress,
-        merchantUpiVpa: merchantUpiVpa,
-        isNewRegistration: true,
-      );
-
-  /// Sign in convenience wrapper (calls activateSoftware)
-  Future<ServerAuthResult> signIn({
-    required String identifier,
-    required String password,
-  }) =>
-      activateSoftware(
-        adminName: 'Admin',
-        phone: identifier,
-        email: identifier.contains('@') ? identifier : null,
-        password: password,
-        pin: password.length == 4 && RegExp(r'^\d{4}$').hasMatch(password) ? password : '1234',
+      final fallbackOp = KioskOperator(
+        id: operatorId,
+        fullName: 'Desk Operator',
+        phone: '',
+        role: OperatorRole.operator,
+        passwordHash: '',
+        pin: pin.trim(),
         kioskName: 'Dossier Kiosk',
-        isNewRegistration: false,
+        createdAt: DateTime.now(),
+        lastLoginAt: DateTime.now(),
       );
 
-  /// Verify 4-digit PIN with remote server
-  Future<ServerAuthResult> verifyPin({
-    required String operatorId,
-    required String pin,
-  }) async {
-    return operatorLogin(operatorId: operatorId, pin: pin);
-  }
-
-  /// Ping server to verify API health & connectivity
-  Future<bool> checkServerHealth() async {
-    try {
-      final uri = Uri.parse('$baseUrl/api/v1/auth/health');
-      final response = await _client.get(uri).timeout(const Duration(seconds: 4));
-      return response.statusCode == 200;
-    } catch (_) {
-      return false;
+      return ServerAuthResult.success(
+        token: 'shift-token-offline-${const Uuid().v4().substring(0, 8)}',
+        operator: fallbackOp,
+        operators: [fallbackOp],
+        isOfflineFallback: true,
+      );
     }
   }
 }

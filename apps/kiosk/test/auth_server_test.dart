@@ -4,40 +4,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:dossier/data/remote/auth/server_auth_api_service.dart';
-import 'package:dossier/features/auth/models/operator_model.dart';
+import 'package:dossier/features/auth/domain/models/auth_user.dart';
+import 'package:dossier/features/auth/domain/strategies/auth_strategy_factory.dart';
+import 'package:dossier/features/auth/domain/strategies/email_password_auth_strategy.dart';
+import 'package:dossier/features/auth/domain/strategies/phone_password_auth_strategy.dart';
+import 'package:dossier/features/auth/domain/strategies/google_sso_auth_strategy.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
 
 void main() {
-  group('Software Activation & Two-Tier Operator Auth Tests', () {
-    test('1. Admin activateSoftware registers kiosk and returns activation token with operators list', () async {
+  group('Auth Strategy Inheritance & Multi-Step Activation Tests', () {
+    test('1. EmailPasswordAuthStrategy signs up user and validates input format', () async {
+      final invalidStrategy = EmailPasswordAuthStrategy(email: 'invalid-email', password: '123');
+      final validationErr = invalidStrategy.validate();
+      expect(validationErr, isNotNull);
+
       final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/v1/auth/activate') {
+        if (request.url.path == '/api/v1/auth/signup') {
           final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
               'success': true,
-              'isActivated': true,
-              'activationToken': 'jwt-activation-token-999',
-              'admin': {
-                'id': 'usr-admin-1',
-                'name': reqBody['adminName'],
-                'mobile': reqBody['mobile'],
+              'token': 'jwt-email-token',
+              'user': {
+                'id': 'usr-email-1',
+                'name': reqBody['name'],
+                'email': reqBody['email'],
                 'role': 'admin',
+                'authProvider': 'email',
+                'hasKiosk': false,
               },
-              'kiosk': {
-                'id': 'ksk-100',
-                'name': reqBody['kioskName'],
-                'phone': reqBody['mobile'],
-              },
-              'operators': [
-                {
-                  'id': 'usr-admin-1',
-                  'name': reqBody['adminName'],
-                  'mobile': reqBody['mobile'],
-                  'role': 'admin',
-                  'pin': reqBody['pin'],
-                }
-              ],
+              'hasKiosk': false,
             }),
             201,
             headers: {'content-type': 'application/json'},
@@ -46,110 +42,144 @@ void main() {
         return http.Response('Not Found', 404);
       });
 
-      final api = ServerAuthApiService(client: mockClient);
-      final result = await api.activateSoftware(
-        adminName: 'Rajesh Kumar',
-        phone: '9876543210',
-        email: 'rajesh@csc.in',
-        password: 'AdminPassword1',
-        pin: '1234',
-        kioskName: 'Balaji CSC Center',
-        isNewRegistration: true,
+      final validStrategy = EmailPasswordAuthStrategy(
+        email: 'admin@csc.in',
+        password: 'SecurePassword123',
+        name: 'Ramesh Admin',
+        client: mockClient,
       );
 
+      final result = await validStrategy.authenticate(baseUrl: 'https://api.dossier.app', isSignUp: true);
       expect(result.isSuccess, isTrue);
-      expect(result.isActivated, isTrue);
-      expect(result.token, 'jwt-activation-token-999');
-      expect(result.operator?.fullName, 'Rajesh Kumar');
-      expect(result.operator?.role, OperatorRole.admin);
-      expect(result.operators.length, 1);
+      expect(result.user?.email, 'admin@csc.in');
+      expect(result.user?.provider, AuthProviderType.email);
+      expect(result.hasKiosk, isFalse);
     });
 
-    test('2. Admin provisions desk operator on server via createOperatorOnServer', () async {
+    test('2. PhonePasswordAuthStrategy signs up user with 10-digit mobile number', () async {
       final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/v1/auth/operators') {
+        if (request.url.path == '/api/v1/auth/signup') {
           final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
               'success': true,
-              'operator': {
-                'id': 'op-staff-2',
+              'token': 'jwt-phone-token',
+              'user': {
+                'id': 'usr-phone-1',
                 'name': reqBody['name'],
-                'role': reqBody['role'],
                 'mobile': reqBody['mobile'],
-                'email': reqBody['email'],
+                'role': 'admin',
+                'authProvider': 'mobile',
+                'hasKiosk': false,
               },
+              'hasKiosk': false,
             }),
             201,
             headers: {'content-type': 'application/json'},
           );
         }
-        return http.Response('Unauthorized', 401);
+        return http.Response('Not Found', 404);
       });
 
-      final api = ServerAuthApiService(client: mockClient);
-      final result = await api.createOperatorOnServer(
-        token: 'valid-jwt-token',
+      final phoneStrategy = PhonePasswordAuthStrategy(
+        phone: '9876543210',
+        password: 'Password123',
         name: 'Suresh Desk',
-        pin: '5678',
-        role: OperatorRole.operator,
-        phone: '9123456780',
-        kioskName: 'Balaji CSC Center',
+        client: mockClient,
       );
 
+      final result = await phoneStrategy.authenticate(baseUrl: 'https://api.dossier.app', isSignUp: true);
       expect(result.isSuccess, isTrue);
-      expect(result.operator?.fullName, 'Suresh Desk');
-      expect(result.operator?.role, OperatorRole.operator);
-      expect(result.operator?.pin, '5678');
+      expect(result.user?.phone, '9876543210');
+      expect(result.user?.provider, AuthProviderType.mobile);
     });
 
-    test('3. AuthNotifier orchestrates Software Activation -> Operator Creation -> Operator PIN shift login', () async {
+    test('3. GoogleSsoAuthStrategy exchanges mock SSO token for authenticated user session', () async {
       final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/v1/auth/activate') {
+        if (request.url.path == '/api/v1/auth/google') {
           return http.Response(
             jsonEncode({
               'success': true,
-              'isActivated': true,
-              'activationToken': 'token-xyz',
-              'admin': {
-                'id': 'adm-1',
-                'name': 'Master Admin',
-                'mobile': '9998887776',
+              'token': 'jwt-google-sso-token',
+              'user': {
+                'id': 'usr-google-1',
+                'name': 'Google Kiosk Owner',
+                'email': 'owner@gmail.com',
                 'role': 'admin',
+                'authProvider': 'google',
+                'hasKiosk': false,
               },
-              'kiosk': {'id': 'ksk-1', 'name': 'Apex Kiosk'},
-              'operators': [
-                {'id': 'adm-1', 'name': 'Master Admin', 'role': 'admin', 'pin': '1111'}
-              ],
+              'hasKiosk': false,
             }),
-            201,
+            200,
             headers: {'content-type': 'application/json'},
           );
-        } else if (request.url.path == '/api/v1/auth/operators') {
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final googleStrategy = GoogleSsoAuthStrategy(
+        mockEmail: 'owner@gmail.com',
+        mockName: 'Google Kiosk Owner',
+        mockId: 'g_12345',
+        client: mockClient,
+      );
+
+      final result = await googleStrategy.authenticate(baseUrl: 'https://api.dossier.app', isSignUp: false);
+      expect(result.isSuccess, isTrue);
+      expect(result.user?.email, 'owner@gmail.com');
+      expect(result.user?.provider, AuthProviderType.google);
+      expect(result.hasKiosk, isFalse);
+    });
+
+    test('4. Full Flow: User Login -> Kiosk Setup/Activation -> Operator Shift Login', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/signin') {
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'token': 'jwt-user-session',
+              'user': {
+                'id': 'usr-main-admin',
+                'name': 'Yogesh Owner',
+                'email': 'yogesh@csc.in',
+                'role': 'admin',
+                'authProvider': 'email',
+                'hasKiosk': false,
+              },
+              'hasKiosk': false,
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        } else if (request.url.path == '/api/v1/auth/kiosk/register') {
           final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
               'success': true,
-              'operator': {
-                'id': 'op-counter-1',
-                'name': reqBody['name'],
-                'role': 'operator',
-                'pin': reqBody['pin'],
+              'isActivated': true,
+              'activationToken': 'jwt-activated-token',
+              'admin': {
+                'id': reqBody['userId'],
+                'name': 'Yogesh Owner',
+                'email': 'yogesh@csc.in',
+                'role': 'admin',
               },
-            }),
-            201,
-            headers: {'content-type': 'application/json'},
-          );
-        } else if (request.url.path == '/api/v1/auth/operator-login') {
-          return http.Response(
-            jsonEncode({
-              'success': true,
-              'token': 'shift-jwt-token',
-              'operator': {
-                'id': 'op-counter-1',
-                'name': 'Counter Staff 1',
-                'role': 'operator',
+              'kiosk': {
+                'id': 'ksk-1',
+                'name': reqBody['kioskName'],
+                'address': reqBody['kioskAddress'],
+                'merchantUpiVpa': reqBody['merchantUpiVpa'],
               },
+              'operators': [
+                {
+                  'id': reqBody['userId'],
+                  'name': 'Yogesh Owner',
+                  'role': 'admin',
+                  'email': 'yogesh@csc.in',
+                  'pin': reqBody['pin'],
+                }
+              ],
             }),
             200,
             headers: {'content-type': 'application/json'},
@@ -169,44 +199,31 @@ void main() {
 
       final notifier = container.read(authProvider.notifier);
 
-      // Step 1: Software is initially unactivated
+      // Step 1: Initial state (Not logged in, not activated)
+      expect(container.read(authProvider).isUserLoggedIn, isFalse);
       expect(container.read(authProvider).isSoftwareActivated, isFalse);
-      expect(container.read(authProvider).isAuthenticated, isFalse);
 
-      // Step 2: Admin activates software
-      final activated = await notifier.activateSoftware(
-        adminName: 'Master Admin',
-        phone: '9998887776',
-        password: 'Pass',
-        pin: '1111',
-        kioskName: 'Apex Kiosk',
-        isNewRegistration: true,
+      // Step 2: User logs in with Email/Password strategy
+      final strategy = AuthStrategyFactory.createEmailStrategy(
+        email: 'yogesh@csc.in',
+        password: 'Password123',
       );
-      expect(activated, isTrue);
+      final loginSuccess = await notifier.authenticateWithStrategy(strategy, isSignUp: false);
+      expect(loginSuccess, isTrue);
+      expect(container.read(authProvider).isUserLoggedIn, isTrue);
+      expect(container.read(authProvider).isSoftwareActivated, isFalse); // Kiosk not yet registered!
+
+      // Step 3: Logged-in user sets up the kiosk and activates software
+      final setupSuccess = await notifier.registerKioskAndActivate(
+        kioskName: 'Main CSC Center',
+        kioskAddress: 'Market Road #12',
+        merchantUpiVpa: 'kiosk@upi',
+        pin: '4321',
+      );
+      expect(setupSuccess, isTrue);
       expect(container.read(authProvider).isSoftwareActivated, isTrue);
-      expect(container.read(authProvider).isAuthenticated, isTrue);
-
-      // Step 3: Admin provisions a staff operator
-      final added = await notifier.addOperator(
-        name: 'Counter Staff 1',
-        pin: '9999',
-        role: OperatorRole.operator,
-      );
-      expect(added, isTrue);
-      expect(container.read(authProvider).registeredOperators.length, 2);
-
-      // Step 4: Logout shift and login with staff operator PIN
-      notifier.logout();
-      expect(container.read(authProvider).isAuthenticated, isFalse);
-      expect(container.read(authProvider).isSoftwareActivated, isTrue); // Software remains activated
-
-      final shiftLogin = await notifier.loginOperatorWithPin(
-        operatorId: 'op-counter-1',
-        pin: '9999',
-      );
-      expect(shiftLogin, isTrue);
-      expect(container.read(authProvider).isAuthenticated, isTrue);
-      expect(container.read(authProvider).currentOperator?.fullName, 'Counter Staff 1');
+      expect(container.read(authProvider).adminOperator?.fullName, 'Yogesh Owner');
+      expect(container.read(authProvider).registeredOperators.length, 1);
     });
   });
 }
