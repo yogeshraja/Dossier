@@ -1,58 +1,85 @@
-# Miscellaneous
+# ==============================================================================
+# Dossier Monorepo .gitignore
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Operating System & General
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 *.class
 *.lock
 *.log
 *.pyc
 *.swp
+*.swo
+*~
 .buildlog/
 .history
+
+# ------------------------------------------------------------------------------
+# IDEs and Editors
+# ------------------------------------------------------------------------------
 .idea/
+**/.idea/
 *.iml
+**/*.iml
 .vscode/
-devtools_options.yaml
+**/.vscode/
+*.ipr
+*.iws
 
+# ------------------------------------------------------------------------------
+# Node.js & Cloudflare Backend (services/api)
+# ------------------------------------------------------------------------------
+node_modules/
+**/node_modules/
+.wrangler/
+**/.wrangler/
+dist/
+**/dist/
+.env
+.env.*
+.dev.vars
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-
-# Flutter repo-specific
-/bin/cache/
-/bin/internal/bootstrap.bat
-/bin/internal/bootstrap.sh
-/bin/mingit/
-/dev/benchmarks/mega_gallery/
-/dev/bots/.recipe_deps
-/dev/bots/android_tools/
-/dev/devicelab/ABresults*.json
-/dev/docs/doc/
-/dev/docs/flutter.docs.zip
-/dev/docs/lib/
-/dev/docs/pubspec.yaml
-/dev/integration_tests/**/xcuserdata
-/dev/integration_tests/**/Pods
-/packages/flutter/coverage/
-version
-analysis_benchmark.json
-
-# packages file containing multi-root paths
-.packages.generated
-
-# Flutter/Dart/Pub related
-**/doc/api/
+# ------------------------------------------------------------------------------
+# Flutter & Dart (apps/kiosk)
+# ------------------------------------------------------------------------------
 .dart_tool/
+**/.dart_tool/
 .flutter-plugins
+**/.flutter-plugins
 .flutter-plugins-dependencies
-**/generated_plugin_registrant.dart
+**/.flutter-plugins-dependencies
 .packages
-.pub-preload-cache/
+**/.packages
 .pub/
+**/.pub/
+.pub-preload-cache/
+**/.pub-preload-cache/
 build/
+**/build/
+**/doc/api/
 flutter_*.png
 linked_*.ds
 unlinked.ds
 unlinked_spec.ds
+analysis_benchmark.json
 
-# Android related
+# ------------------------------------------------------------------------------
+# Android
+# ------------------------------------------------------------------------------
 **/android/**/gradle-wrapper.jar
 .gradle/
+**/.gradle/
 **/android/captures/
 **/android/gradlew
 **/android/gradlew.bat
@@ -60,8 +87,11 @@ unlinked_spec.ds
 **/android/**/GeneratedPluginRegistrant.java
 **/android/key.properties
 *.jks
+*.keystore
 
-# iOS/XCode related
+# ------------------------------------------------------------------------------
+# iOS & macOS
+# ------------------------------------------------------------------------------
 **/ios/**/*.mode1v3
 **/ios/**/*.mode2v3
 **/ios/**/*.moved-aside
@@ -91,33 +121,26 @@ unlinked_spec.ds
 **/ios/ServiceDefinitions.json
 **/ios/Runner/GeneratedPluginRegistrant.*
 
-# macOS
-**/Flutter/ephemeral/
-**/Pods/
+**/macos/Flutter/ephemeral
 **/macos/Flutter/GeneratedPluginRegistrant.swift
 **/macos/Flutter/ephemeral
-**/xcuserdata/
+**/macos/xcuserdata/
+**/macos/Pods/
+**/macos/DerivedData/
 
-# Windows
+# ------------------------------------------------------------------------------
+# Windows & Linux
+# ------------------------------------------------------------------------------
 **/windows/flutter/generated_plugin_registrant.cc
 **/windows/flutter/generated_plugin_registrant.h
 **/windows/flutter/generated_plugins.cmake
-
-# Linux
 **/linux/flutter/generated_plugin_registrant.cc
 **/linux/flutter/generated_plugin_registrant.h
 **/linux/flutter/generated_plugins.cmake
+**/ephemeral/
 
-# Coverage
-coverage/
-
-# Symbols
-app.*.symbols
-
-# Exceptions to above rules.
+# Exceptions
 !**/ios/**/default.mode1v3
 !**/ios/**/default.mode2v3
 !**/ios/**/default.pbxuser
 !**/ios/**/default.perspectivev3
-!/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
-!/dev/ci/**/Gemfile.lock

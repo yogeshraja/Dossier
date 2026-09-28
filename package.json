@@ -1,0 +1,20 @@
+{
+  "name": "dossier-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dossier: Offline-First CRM, Kiosk Vault & Touch POS Monorepo",
+  "workspaces": [
+    "services/*"
+  ],
+  "scripts": {
+    "dev:api": "npm --prefix services/api run dev",
+    "deploy:api": "npm --prefix services/api run deploy",
+    "db:local": "npm --prefix services/api run db:init:local",
+    "db:remote": "npm --prefix services/api run db:init:remote",
+    "build:api": "npm --prefix services/api run build",
+    "test:client": "cd apps/kiosk && flutter test",
+    "analyze:client": "cd apps/kiosk && flutter analyze",
+    "run:kiosk:linux": "cd apps/kiosk && flutter run -d linux",
+    "run:kiosk:web": "cd apps/kiosk && flutter run -d chrome"
+  }
+}

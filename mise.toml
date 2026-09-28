@@ -1,0 +1,57 @@
+[tools]
+node = "26"
+flutter = "3.47"
+
+[env]
+# Monorepo environment configuration
+FLUTTER_ROOT = "{{config_root}}/apps/kiosk"
+BACKEND_ROOT = "{{config_root}}/services/api"
+
+[tasks."dev:api"]
+description = "Start Cloudflare Worker development server (http://127.0.0.1:8787)"
+dir = "services/api"
+run = "npm run dev"
+
+[tasks."build:api"]
+description = "Compile TypeScript for Cloudflare Worker"
+dir = "services/api"
+run = "npm run build"
+
+[tasks."deploy:api"]
+description = "Deploy Cloudflare Worker to production"
+dir = "services/api"
+run = "npm run deploy"
+
+[tasks."db:local"]
+description = "Initialize or reset local D1 SQLite database"
+dir = "services/api"
+run = "npm run db:init:local"
+
+[tasks."db:remote"]
+description = "Execute schema migrations on remote Cloudflare D1 database"
+dir = "services/api"
+run = "npm run db:init:remote"
+
+[tasks."test:client"]
+description = "Run all Flutter unit, widget, and auth tests"
+dir = "apps/kiosk"
+run = "flutter test"
+
+[tasks."analyze:client"]
+description = "Run Flutter analyzer on kiosk app"
+dir = "apps/kiosk"
+run = "flutter analyze"
+
+[tasks."run:kiosk:linux"]
+description = "Launch Kiosk Touch POS on Linux Desktop"
+dir = "apps/kiosk"
+run = "flutter run -d linux"
+
+[tasks."run:kiosk:web"]
+description = "Launch Kiosk Touch POS in Chrome (WASM + OPFS)"
+dir = "apps/kiosk"
+run = "flutter run -d chrome"
+
+[tasks."test:all"]
+description = "Verify entire monorepo (Flutter test + analyze + Worker build)"
+depends = ["test:client", "analyze:client", "build:api"]

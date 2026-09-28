@@ -3,7 +3,9 @@
 ## 1. Project Identity & Philosophy
 - **Product:** Dossier (Offline-First CRM, Kiosk Vault & Touch POS).
 - **Domain:** Internet service centers, Common Service Centres (CSCs), cyber cafes, and document processing kiosks.
-- **Core Architecture:** Offline-first reactive state management (Riverpod), local relational SQL (Drift SQLite), pure-Dart background media compute (Isolates), pluggable multi-tier cloud storage (BYO Google Drive vs. Managed Cloudflare R2 vs. Air-Gapped Local Backups), and direct hardware ESC/POS thermal printing.
+- **Workspace Monorepo Layout:**
+  - `apps/kiosk/`: Cross-platform Flutter client targeting Windows, Android, macOS, iOS, Linux, and Web (WASM).
+  - `services/api/`: Cloudflare Workers + D1 SQLite serverless edge backend.
 
 ---
 
@@ -11,13 +13,13 @@
 
 ### 2.1 State Management & Layer Separation (Riverpod)
 - Maintain strict separation of concerns across layers:
-  - **UI / Screens / Widgets:** Pure visual presentation and user event dispatching. Never embed business logic, direct SQLite queries, or disk I/O in Flutter widgets or `build()` methods.
+  - **UI / Screens / Widgets:** Pure visual presentation and user event dispatching (`apps/kiosk/lib/presentation/` & `apps/kiosk/lib/features/`). Never embed business logic, direct SQLite queries, or disk I/O in Flutter widgets or `build()` methods.
   - **Controllers / Notifiers:** Extend Riverpod `Notifier`, `AsyncNotifier`, or `StateNotifier` to manage business logic and orchestrate domain workflows.
   - **Repositories & DAOs:** Encapsulate all database mutations, outbox queue entries, and remote sync calls.
   - **Domain Services:** Standalone pure-Dart services for media manipulation, ESC/POS hardware formatting, UPI QR generation, WhatsApp intent links, and backup bundle serialization.
 
 ### 2.2 Local Persistence & Outbox Sync (Drift SQLite)
-- All schema changes must be declared in Drift table files under `lib/data/local/tables/`.
+- All schema changes must be declared in Drift table files under `apps/kiosk/lib/data/local/tables/`.
 - Maintain dual-engine execution:
   - **Desktop / Mobile:** Native C-FFI SQLite driver for maximum speed and raw hardware access.
   - **Web:** SQLite3 compiled to WASM with Origin Private File System (OPFS) and web worker isolation.
