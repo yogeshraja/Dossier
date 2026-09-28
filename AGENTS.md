@@ -5,6 +5,7 @@
 - **Domain:** Internet service centers, Common Service Centres (CSCs), cyber cafes, and document processing kiosks.
 - **Workspace Monorepo Layout:**
   - `apps/kiosk/`: Cross-platform Flutter client targeting Windows, Android, macOS, iOS, Linux, and Web (WASM).
+  - `apps/web/`: Web marketing landing page & interactive documentation portal (Vite + Vanilla CSS/JS).
   - `services/api/`: Cloudflare Workers + D1 SQLite serverless edge backend.
 
 ---
@@ -39,14 +40,22 @@
   - Cash drawer kick pulse: `ESC p 0 25 250` (`0x1B, 0x70, 0, 25, 250`)
 - Always format receipts with two-column aligned rows matching exact character widths (32 chars for 58mm, 48 chars for 80mm).
 
-### 2.5 Multi-Operator Authentication & Session Rules
-- Authentication is 100% offline-first. Credentials, hashed PINs, and session states are managed locally via secure state storage.
-- Support multi-operator kiosk switching:
-  - Role hierarchy: `Owner / Manager` (full administrative rights, catalog pricing, EOD register closure) vs. `Operator` (counter sales, case intake, and media studio).
-  - Quick 4-digit PIN unlock screen for fast desk handoffs.
-  - Operator avatar badge always visible in the sidebar and top navigation.
+### 2.5 Web-First Design & Progressive Local Enhancement Mandate
+- **Web-First Philosophy:** Design and build all UI components, user flows, navigation hierarchies, and data interactions for a **modern web experience first**.
+  - **Browser Parity:** The app must run smoothly in standard modern web browsers (Chrome, Edge, Firefox, Safari) using Flutter WASM and OPFS.
+  - **Fluid Responsive Layouts:** Use CSS-like fluid flex layouts, standard web breakpoints (`320px`, `640px`, `1000px`, `1440px`), smooth hover micro-animations, and full keyboard accessibility (`Tab`, `Escape`, `Enter`, `Ctrl+K` / `Cmd+K`).
+  - **Progressive Local Enhancement:** The desktop and mobile native builds take advantage of local OS capabilities (native C-FFI SQLite driver, direct raw ESC/POS thermal printer byte buffers, background Dart isolates for heavy PDF/image compute) as transparent enhancements without fragmenting or diverging from the core web codebase.
 
-### 2.6 UI Modernization & Design Standards
+### 2.6 Software Activation Gate & Two-Tier Operator Authentication
+- **Software Activation Gate:**
+  1. The software is initially unactivated/locked. A user must log in or sign up as the **Admin / Owner** to activate the software installation on the device/tenant.
+  2. Software activation establishes the master kiosk identity, stores the cloud tenant credentials, and unlocks the application features.
+- **Two-Tier Authentication Architecture:**
+  1. **Tier 1 (Admin Software Activation):** Master account authentication on remote servers. Manages kiosk settings, cloud backup policies, catalog pricing, and operator provisioning.
+  2. **Tier 2 (Daily Desk Operator Shift Login):** Once the software is activated, day-to-day counter staff log in via quick operator selection and 4-digit PIN unlock (or quick credentials).
+  3. **Server Synchronization:** All operators created by the Admin are saved to remote servers (Cloudflare D1) and cached locally in Drift SQLite for instant offline operation during network downtime.
+
+### 2.7 UI Modernization & Design Standards
 - **Design Tokens & Palette:**
   - Dark Theme: Deep Slate 950 (`#090D16`), Slate 900 (`#0F172A`), Slate 800 (`#1E293B`), Slate 700 (`#334155`).
   - Light Theme: Slate 50 (`#F8FAFC`), Slate 200 (`#E2E8F0`), Pure White (`#FFFFFF`).
@@ -66,7 +75,7 @@
   - `AnimatedThermalReceiptDialog`: Custom-painted zigzag serrated tear edge with realistic paper slide-up physics.
   - `SparklineChart`: Pure-Dart cubic bezier curve micro-chart with touch/hover scrub line tooltip.
 
-### 2.7 Zero-Overflow Responsive Layout Mandate
+### 2.8 Zero-Overflow Responsive Layout Mandate
 - The UI must adapt seamlessly across all standard breakpoints:
   - **Desktop (≥ 1000dp):** 3-pane split view (Customer Dossiers | Cases & Intake | Billing / Dispatch Hub) or full-width data grids.
   - **Tablet (640dp – 1000dp):** Collapsible 2-pane view with collapsible sidebar rail.

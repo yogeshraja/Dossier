@@ -330,11 +330,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('DOSSIER'), findsWidgets);
-      expect(find.text('High-Density Workstation for Cyber Cafes & Service Desks'), findsOneWidget);
-      expect(find.text('Operator Sign-In'), findsOneWidget);
-      expect(find.text('New Kiosk Setup'), findsOneWidget);
-      expect(find.text('100% Offline Local Vault'), findsOneWidget);
+      expect(find.text('Software Activation'), findsOneWidget);
+      expect(find.text('Register New Kiosk'), findsOneWidget);
+      expect(find.text('Sign In Existing Admin'), findsOneWidget);
     });
 
     testWidgets('AuthScreen renders on Mobile (390x844) with 0 overflows', (WidgetTester tester) async {
@@ -353,9 +351,9 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('DOSSIER'), findsWidgets);
-      expect(find.text('Operator Sign-In'), findsOneWidget);
-      expect(find.text('New Kiosk Setup'), findsOneWidget);
+      expect(find.text('Software Activation'), findsOneWidget);
+      expect(find.text('Register New Kiosk'), findsOneWidget);
+      expect(find.text('Sign In Existing Admin'), findsOneWidget);
     });
 
     testWidgets('AuthScreen renders on Tablet (768x1024) with 0 overflows', (WidgetTester tester) async {
@@ -374,8 +372,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('DOSSIER'), findsWidgets);
-      expect(find.text('Operator Sign-In'), findsOneWidget);
+      expect(find.text('Software Activation'), findsOneWidget);
+      expect(find.text('Register New Kiosk'), findsOneWidget);
     });
 
     testWidgets('AuthScreen renders on Small Mobile (320x600) with 0 overflows', (WidgetTester tester) async {
@@ -394,11 +392,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('DOSSIER'), findsWidgets);
-      expect(find.text('Operator Sign-In'), findsOneWidget);
+      expect(find.text('Software Activation'), findsOneWidget);
     });
 
-    testWidgets('AuthScreen switches between Sign-In and Sign-Up tabs', (WidgetTester tester) async {
+    testWidgets('AuthScreen switches between Register New Kiosk and Sign In Existing Admin tabs', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -413,58 +410,68 @@ void main() {
 
       await tester.pump();
 
-      // Switch to New Kiosk Setup
-      await tester.tap(find.text('New Kiosk Setup'));
+      // Verify register mode fields
+      expect(find.text('Register New Kiosk'), findsOneWidget);
+      expect(find.text('Kiosk Center Name'), findsOneWidget);
+      expect(find.text('Admin Full Name'), findsOneWidget);
+
+      // Switch to Sign In Existing Admin
+      await tester.tap(find.text('Sign In Existing Admin'));
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Register Kiosk & Master Operator'), findsOneWidget);
-      expect(find.text('CSC / Kiosk Business Name'), findsOneWidget);
-      expect(find.text('Master Operator Name'), findsOneWidget);
-
-      // Switch back to Sign-In
-      await tester.tap(find.text('Operator Sign-In'));
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.text('Enter Credentials'), findsOneWidget);
+      expect(find.text('Admin Mobile / Email'), findsOneWidget);
+      expect(find.text('Sign In & Activate'), findsOneWidget);
     });
 
-    testWidgets('AuthScreen switches to PIN pad mode and handles keypad taps', (WidgetTester tester) async {
+    testWidgets('AuthScreen renders Operator Shift Login when software is activated', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      // Activate software on container
+      final authNotifier = container.read(authProvider.notifier);
+      await authNotifier.activateSoftware(
+        adminName: 'Admin Raj',
+        phone: '9876543210',
+        password: 'pass',
+        pin: '1234',
+        kioskName: 'City CSC Center',
+        isNewRegistration: true,
+      );
+
+      // Logout shift to test Operator Login Screen
+      authNotifier.logout();
+
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
             home: AuthScreen(),
           ),
         ),
       );
 
       await tester.pump();
-
-      // Switch to Operator Sign-In first
-      await tester.tap(find.text('Operator Sign-In'));
       await tester.pump(const Duration(milliseconds: 200));
 
-      // Switch to PIN mode via "Use PIN"
-      await tester.tap(find.text('Use PIN'));
-      await tester.pump(const Duration(milliseconds: 200));
-
-      expect(find.text('Quick PIN Unlock'), findsOneWidget);
+      expect(find.text('City CSC Center'), findsOneWidget);
+      expect(find.text('Select Desk Operator'), findsOneWidget);
       expect(find.text('1'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
       expect(find.text('3'), findsOneWidget);
 
-      // Tap PIN digits 1-2-3-4
+      // Tap PIN digits and clear key
       await tester.tap(find.text('1'));
       await tester.pump();
       await tester.tap(find.text('2'));
       await tester.pump();
       await tester.tap(find.text('3'));
       await tester.pump();
-      await tester.tap(find.text('4'));
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('C'));
+      await tester.pump();
     });
 
     test('AuthNotifier signs in with credentials, registers operator, and manages PIN unlock', () async {

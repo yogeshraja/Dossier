@@ -6,6 +6,22 @@ flutter = "3.47"
 # Monorepo environment configuration
 FLUTTER_ROOT = "{{config_root}}/apps/kiosk"
 BACKEND_ROOT = "{{config_root}}/services/api"
+WEB_ROOT = "{{config_root}}/apps/web"
+
+[tasks."dev:web"]
+description = "Start Vite development server for marketing & docs website"
+dir = "apps/web"
+run = "npm run dev"
+
+[tasks."build:web"]
+description = "Build static bundle for marketing & docs website"
+dir = "apps/web"
+run = "npm run build"
+
+[tasks."preview:web"]
+description = "Preview built marketing & docs website"
+dir = "apps/web"
+run = "npm run preview"
 
 [tasks."dev:api"]
 description = "Start Cloudflare Worker development server (http://127.0.0.1:8787)"
@@ -53,5 +69,5 @@ dir = "apps/kiosk"
 run = "flutter run -d chrome"
 
 [tasks."test:all"]
-description = "Verify entire monorepo (Flutter test + analyze + Worker build)"
-depends = ["test:client", "analyze:client", "build:api"]
+description = "Verify entire monorepo (Flutter test + analyze + Worker build + Web build)"
+depends = ["test:client", "analyze:client", "build:api", "build:web"]

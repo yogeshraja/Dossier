@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:dossier/features/auth/models/operator_model.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
-import 'package:dossier/features/settings/providers/settings_provider.dart';
 import 'package:dossier/main.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
+import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 
-enum AuthMode { signIn, signUp }
-enum SignInMethod { password, pin }
+enum ActivationMode { register, signIn }
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -20,44 +19,36 @@ class AuthScreen extends ConsumerStatefulWidget {
   ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProviderStateMixin {
-  AuthMode _authMode = AuthMode.signIn;
-  SignInMethod _signInMethod = SignInMethod.password;
+class _AuthScreenState extends ConsumerState<AuthScreen> {
+  // Activation Mode Controllers
+  ActivationMode _activationMode = ActivationMode.register;
+  final _adminNameCtrl = TextEditingController();
+  final _adminPhoneCtrl = TextEditingController();
+  final _adminEmailCtrl = TextEditingController();
+  final _adminPasswordCtrl = TextEditingController();
+  final _adminPinCtrl = TextEditingController();
+  final _kioskNameCtrl = TextEditingController();
+  final _kioskAddressCtrl = TextEditingController();
+  final _merchantUpiCtrl = TextEditingController();
+  final bool _obscurePassword = true;
 
-  // Sign-In Form Controllers
-  final _signInIdentifierCtrl = TextEditingController();
-  final _signInPasswordCtrl = TextEditingController();
-  bool _obscureSignInPassword = true;
-
-  // PIN Unlock State
+  // Operator Shift PIN State
   String _enteredPin = '';
   String? _selectedOperatorId;
 
-  // Sign-Up Form Controllers
-  final _signUpKioskNameCtrl = TextEditingController();
-  final _signUpOperatorNameCtrl = TextEditingController();
-  final _signUpPhoneCtrl = TextEditingController();
-  final _signUpEmailCtrl = TextEditingController();
-  final _signUpPasswordCtrl = TextEditingController();
-  final _signUpPinCtrl = TextEditingController();
-  final _signUpUpiCtrl = TextEditingController();
-  final _signUpAddressCtrl = TextEditingController();
-  OperatorRole _signUpRole = OperatorRole.admin;
-  bool _obscureSignUpPassword = true;
-
-  final _formKey = GlobalKey<FormState>();
+  // New Operator Dialog Controllers
+  final _newOpNameCtrl = TextEditingController();
+  final _newOpPinCtrl = TextEditingController();
+  final _newOpPhoneCtrl = TextEditingController();
+  final _newOpEmailCtrl = TextEditingController();
+  OperatorRole _newOpRole = OperatorRole.operator;
 
   @override
   void initState() {
     super.initState();
-    // Default to sign-up if no operator exists yet, or select the first operator for PIN
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = ref.read(authProvider);
-      if (auth.registeredOperators.isEmpty) {
-        setState(() {
-          _authMode = AuthMode.signUp;
-        });
-      } else {
+      if (auth.registeredOperators.isNotEmpty) {
         setState(() {
           _selectedOperatorId = auth.registeredOperators.first.id;
         });
@@ -67,20 +58,22 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
 
   @override
   void dispose() {
-    _signInIdentifierCtrl.dispose();
-    _signInPasswordCtrl.dispose();
-    _signUpKioskNameCtrl.dispose();
-    _signUpOperatorNameCtrl.dispose();
-    _signUpPhoneCtrl.dispose();
-    _signUpEmailCtrl.dispose();
-    _signUpPasswordCtrl.dispose();
-    _signUpPinCtrl.dispose();
-    _signUpUpiCtrl.dispose();
-    _signUpAddressCtrl.dispose();
+    _adminNameCtrl.dispose();
+    _adminPhoneCtrl.dispose();
+    _adminEmailCtrl.dispose();
+    _adminPasswordCtrl.dispose();
+    _adminPinCtrl.dispose();
+    _kioskNameCtrl.dispose();
+    _kioskAddressCtrl.dispose();
+    _merchantUpiCtrl.dispose();
+    _newOpNameCtrl.dispose();
+    _newOpPinCtrl.dispose();
+    _newOpPhoneCtrl.dispose();
+    _newOpEmailCtrl.dispose();
     super.dispose();
   }
 
-  void _onSuccessfulAuth() {
+  void _onSuccessfulLogin() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => const KioskWorkstationHome(),
@@ -92,13 +85,22 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
     );
   }
 
-  Future<void> _handlePasswordSignIn() async {
-    final success = await ref.read(authProvider.notifier).signInWithCredentials(
-          identifier: _signInIdentifierCtrl.text,
-          password: _signInPasswordCtrl.text,
+  Future<void> _handleActivation() async {
+    final isNew = _activationMode == ActivationMode.register;
+    final success = await ref.read(authProvider.notifier).activateSoftware(
+          adminName: _adminNameCtrl.text,
+          phone: _adminPhoneCtrl.text,
+          email: _adminEmailCtrl.text.isNotEmpty ? _adminEmailCtrl.text : null,
+          password: _adminPasswordCtrl.text,
+          pin: _adminPinCtrl.text,
+          kioskName: _kioskNameCtrl.text.isNotEmpty ? _kioskNameCtrl.text : 'Main Kiosk Center',
+          kioskAddress: _kioskAddressCtrl.text.isNotEmpty ? _kioskAddressCtrl.text : null,
+          merchantUpiVpa: _merchantUpiCtrl.text.isNotEmpty ? _merchantUpiCtrl.text : null,
+          isNewRegistration: isNew,
         );
+
     if (success && mounted) {
-      _onSuccessfulAuth();
+      _onSuccessfulLogin();
     }
   }
 
@@ -109,12 +111,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
       });
 
       if (_enteredPin.length == 4) {
-        final success = await ref.read(authProvider.notifier).signInWithPin(
+        final auth = ref.read(authProvider);
+        final opId = _selectedOperatorId ?? (auth.registeredOperators.isNotEmpty ? auth.registeredOperators.first.id : 'op-default');
+        
+        final success = await ref.read(authProvider.notifier).loginOperatorWithPin(
+              operatorId: opId,
               pin: _enteredPin,
-              operatorId: _selectedOperatorId,
             );
+
         if (success && mounted) {
-          _onSuccessfulAuth();
+          _onSuccessfulLogin();
         } else {
           setState(() {
             _enteredPin = '';
@@ -132,33 +138,114 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
     }
   }
 
-  Future<void> _handleSignUp() async {
-    final success = await ref.read(authProvider.notifier).signUp(
-          kioskName: _signUpKioskNameCtrl.text,
-          operatorName: _signUpOperatorNameCtrl.text,
-          phone: _signUpPhoneCtrl.text,
-          email: _signUpEmailCtrl.text,
-          password: _signUpPasswordCtrl.text,
-          pin: _signUpPinCtrl.text,
-          role: _signUpRole,
-          merchantUpiVpa: _signUpUpiCtrl.text,
-          kioskAddress: _signUpAddressCtrl.text,
-        );
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Kiosk & Master Operator registered successfully!'),
-          backgroundColor: Color(0xFF10B981),
+  void _showAddOperatorDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => DossierDialog(
+          title: 'Provision New Operator',
+          icon: Icons.person_add_alt_1_rounded,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Operators are created on the server and cached locally for rapid desk shift logins.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                DossierInputField(
+                  label: 'Operator Full Name',
+                  hintText: 'e.g. Ramesh Kumar',
+                  controller: _newOpNameCtrl,
+                  prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DossierInputField(
+                        label: '4-Digit PIN',
+                        hintText: '****',
+                        controller: _newOpPinCtrl,
+                        prefixIcon: const Icon(Icons.pin_rounded, size: 18),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Role', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          DropdownButtonFormField<OperatorRole>(
+                            initialValue: _newOpRole,
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            items: OperatorRole.values.map((r) {
+                              return DropdownMenuItem(value: r, child: Text(r.label, style: const TextStyle(fontSize: 12)));
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() => _newOpRole = val);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DossierInputField(
+                  label: 'Mobile Number (Optional)',
+                  hintText: '9876543210',
+                  controller: _newOpPhoneCtrl,
+                  prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                  keyboardType: TextInputType.phone,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            DossierButton(
+              text: 'Create Operator',
+              icon: Icons.check_circle_rounded,
+              onPressed: () async {
+                final success = await ref.read(authProvider.notifier).addOperator(
+                      name: _newOpNameCtrl.text,
+                      pin: _newOpPinCtrl.text,
+                      role: _newOpRole,
+                      phone: _newOpPhoneCtrl.text.isNotEmpty ? _newOpPhoneCtrl.text : null,
+                      email: _newOpEmailCtrl.text.isNotEmpty ? _newOpEmailCtrl.text : null,
+                    );
+                if (success && ctx.mounted) {
+                  _newOpNameCtrl.clear();
+                  _newOpPinCtrl.clear();
+                  _newOpPhoneCtrl.clear();
+                  _newOpEmailCtrl.clear();
+                  Navigator.pop(ctx);
+                }
+              },
+            ),
+          ],
         ),
-      );
-      _onSuccessfulAuth();
-    }
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authProvider);
-    final settings = ref.watch(kioskSettingsProvider);
+    final auth = ref.watch(authProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -168,987 +255,531 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with SingleTickerProvid
         decoration: BoxDecoration(
           gradient: RadialGradient(
             center: const Alignment(0, -0.3),
-            radius: 1.4,
+            radius: 1.3,
             colors: isDark
                 ? [
-                    const Color(0xFF1E1B4B), // Deep indigo
-                    const Color(0xFF0F172A), // Slate 900
-                    const Color(0xFF070B14),
+                    const Color(0xFF1E1B4B),
+                    const Color(0xFF0F172A),
+                    const Color(0xFF090D16),
                   ]
                 : [
-                    const Color(0xFFEEF2FF), // Indigo 50
-                    const Color(0xFFF8FAFC),
+                    const Color(0xFFEEF2FF),
+                    const Color(0xFFF1F5F9),
                     const Color(0xFFE2E8F0),
                   ],
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              // Top Bar with Logo & Theme Switcher
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: auth.isSoftwareActivated
+                  ? _buildOperatorShiftLogin(context, auth, isDark)
+                  : _buildSoftwareActivation(context, auth, isDark),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Tier 1: Software Activation & Master Admin Setup
+  Widget _buildSoftwareActivation(BuildContext context, AuthState auth, bool isDark) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 580),
+      child: DossierCard(
+        variant: DossierCardVariant.glass,
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Server Connection Status Pill
+            _buildServerPill(auth, isDark),
+            const SizedBox(height: 16),
+
+            // Header Icon & Title
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.vpn_key_rounded, color: Colors.white, size: 26),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Software Activation',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Admin sign-in to activate kiosk on Cloudflare server',
+                        style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Mode Selector (New Kiosk Registration vs Existing Admin Sign-In)
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _activationMode = ActivationMode.register),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _activationMode == ActivationMode.register ? const Color(0xFF6366F1) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Register New Kiosk',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _activationMode == ActivationMode.register ? Colors.white : (isDark ? Colors.grey : Colors.black87),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => _activationMode = ActivationMode.signIn),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _activationMode == ActivationMode.signIn ? const Color(0xFF6366F1) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Sign In Existing Admin',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _activationMode == ActivationMode.signIn ? Colors.white : (isDark ? Colors.grey : Colors.black87),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Form Fields
+            if (_activationMode == ActivationMode.register) ...[
+              DossierInputField(
+                label: 'Kiosk Center Name',
+                hintText: 'e.g. Sri Balaji CSC Center',
+                controller: _kioskNameCtrl,
+                prefixIcon: const Icon(Icons.storefront_rounded, size: 18),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DossierInputField(
+                      label: 'Admin Full Name',
+                      hintText: 'e.g. Rajesh Sharma',
+                      controller: _adminNameCtrl,
+                      prefixIcon: const Icon(Icons.person_rounded, size: 18),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DossierInputField(
+                      label: 'Mobile Number',
+                      hintText: '9876543210',
+                      controller: _adminPhoneCtrl,
+                      prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                      keyboardType: TextInputType.phone,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              DossierInputField(
+                label: 'Email (Optional)',
+                hintText: 'admin@csc.in',
+                controller: _adminEmailCtrl,
+                prefixIcon: const Icon(Icons.alternate_email_rounded, size: 18),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DossierInputField(
+                      label: 'Password',
+                      hintText: '••••••••',
+                      controller: _adminPasswordCtrl,
+                      prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
+                      obscureText: _obscurePassword,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DossierInputField(
+                      label: '4-Digit PIN',
+                      hintText: '1234',
+                      controller: _adminPinCtrl,
+                      prefixIcon: const Icon(Icons.pin_rounded, size: 18),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              DossierInputField(
+                label: 'Admin Mobile / Email',
+                hintText: '9876543210 or admin@csc.in',
+                controller: _adminPhoneCtrl,
+                prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DossierInputField(
+                      label: 'Password',
+                      hintText: '••••••••',
+                      controller: _adminPasswordCtrl,
+                      prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
+                      obscureText: _obscurePassword,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DossierInputField(
+                      label: '4-Digit PIN',
+                      hintText: '1234',
+                      controller: _adminPinCtrl,
+                      prefixIcon: const Icon(Icons.pin_rounded, size: 18),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            if (auth.errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.folder_shared_rounded, color: Colors.white, size: 18),
-                    ),
+                    const Icon(Icons.error_outline_rounded, color: Colors.red, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Text(auth.errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 24),
+            DossierButton(
+              text: auth.isLoading ? 'Activating with Server...' : (_activationMode == ActivationMode.register ? 'Register & Activate Kiosk' : 'Sign In & Activate'),
+              icon: Icons.check_circle_rounded,
+              isLoading: auth.isLoading,
+              onPressed: auth.isLoading ? null : _handleActivation,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Tier 2: Operator Shift Login (Select Operator Avatar + 4-Digit PIN)
+  Widget _buildOperatorShiftLogin(BuildContext context, AuthState auth, bool isDark) {
+    final operators = auth.registeredOperators;
+    final selectedOp = operators.firstWhere(
+      (o) => o.id == _selectedOperatorId,
+      orElse: () => operators.isNotEmpty ? operators.first : (auth.adminOperator ?? KioskOperator(
+        id: 'adm',
+        fullName: 'Admin',
+        phone: '',
+        passwordHash: '',
+        pin: '1234',
+        kioskName: 'Kiosk',
+        createdAt: DateTime.now(),
+      )),
+    );
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: DossierCard(
+        variant: DossierCardVariant.glass,
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Activated Center Title & Status
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.verified_rounded, color: Color(0xFF10B981), size: 20),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          auth.adminOperator?.kioskName ?? 'Dossier Kiosk',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const DossierBadge(label: 'Software Active', variant: DossierBadgeVariant.success),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Operator Selection Bar / Cards
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Select Desk Operator',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _showAddOperatorDialog,
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('Add Operator', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Operator Avatar List
+            SizedBox(
+              height: 74,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: operators.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, i) {
+                  final op = operators[i];
+                  final isSelected = op.id == selectedOp.id;
+
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        _selectedOperatorId = op.id;
+                        _enteredPin = '';
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF6366F1).withValues(alpha: 0.2) : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFF6366F1) : Colors.transparent,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
                         children: [
-                          Text(
-                            'DOSSIER',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 1.5,
-                              fontSize: 15,
-                              color: isDark ? Colors.white : const Color(0xFF0F172A),
-                            ),
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: op.role.color,
+                            child: Text(op.initials, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
                           ),
-                          Text(
-                            'Offline-First Kiosk Vault',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
-                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(op.fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                              Text(op.role.label, style: TextStyle(fontSize: 10, color: op.role.color)),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    // Responsive Offline Badge
-                    MediaQuery.of(context).size.width >= 400
-                        ? const DossierBadge(
-                            label: '100% Offline Local Vault',
-                            variant: DossierBadgeVariant.success,
-                            icon: Icons.offline_bolt_rounded,
-                          )
-                        : const DossierBadge(
-                            label: 'Offline',
-                            variant: DossierBadgeVariant.success,
-                            icon: Icons.offline_bolt_rounded,
-                          ),
-                    const SizedBox(width: 4),
-                    // Theme Toggle
-                    IconButton(
-                      icon: Icon(
-                        settings.themeMode == ThemeMode.dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                        size: 20,
-                      ),
-                      tooltip: 'Toggle Theme',
-                      onPressed: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Main Responsive Content Area
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWideScreen = constraints.maxWidth >= 880;
-
-                    if (isWideScreen) {
-                      // Two-Column Layout (Hero Showcase + Auth Card)
-                      return Center(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1060),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // Left Hero Panel
-                                Expanded(
-                                  flex: 5,
-                                  child: _buildHeroShowcasePanel(isDark),
-                                ),
-                                const SizedBox(width: 32),
-                                // Right Auth Card
-                                Expanded(
-                                  flex: 6,
-                                  child: _buildInteractiveAuthCard(isDark, authState),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    } else {
-                      // Single Column Layout for Mobile & Compact Tablets
-                      return Center(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 480),
-                            child: _buildInteractiveAuthCard(isDark, authState),
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Left Hero Showcase Panel (Desktop / Tablet Viewports)
-  Widget _buildHeroShowcasePanel(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF1E293B).withValues(alpha: 0.8), const Color(0xFF0F172A).withValues(alpha: 0.9)]
-              : [Colors.white.withValues(alpha: 0.9), const Color(0xFFEEF2FF).withValues(alpha: 0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark ? const Color(0xFF334155).withValues(alpha: 0.6) : const Color(0xFFCBD5E1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.shield_outlined, size: 14, color: Color(0xFF818CF8)),
-                    SizedBox(width: 6),
-                    Text(
-                      'CSC & KIOSK STATION',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF818CF8),
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'High-Density Workstation for Cyber Cafes & Service Desks',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              height: 1.3,
-              color: isDark ? Colors.white : const Color(0xFF0F172A),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Engineered for rapid customer intake, instant ID photo prep, dynamic UPI checkout, and resilient offline local storage.',
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Feature Grid
-          _buildFeatureBullet(
-            icon: Icons.storage_rounded,
-            title: 'Drift SQLite Offline Vault',
-            desc: 'Zero downtime during broadband outages. Data stays securely on-device.',
-            color: const Color(0xFF6366F1),
-            isDark: isDark,
-          ),
-          const SizedBox(height: 14),
-          _buildFeatureBullet(
-            icon: Icons.camera_enhance_rounded,
-            title: 'Pure-Dart Media Studio',
-            desc: 'Isolate-driven auto-cropping, ID card stitching, and 6/8/12 passport tiling.',
-            color: const Color(0xFF10B981),
-            isDark: isDark,
-          ),
-          const SizedBox(height: 14),
-          _buildFeatureBullet(
-            icon: Icons.qr_code_2_rounded,
-            title: 'POS Register & Dynamic UPI QR',
-            desc: 'Instantly generate UPI payment QR codes and track cash drawers.',
-            color: const Color(0xFFF59E0B),
-            isDark: isDark,
-          ),
-          const SizedBox(height: 14),
-          _buildFeatureBullet(
-            icon: Icons.lock_person_rounded,
-            title: 'Multi-Operator Shift PIN',
-            desc: 'Quick 4-digit terminal switching for operators and counter staff.',
-            color: const Color(0xFFEC4899),
-            isDark: isDark,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeatureBullet({
-    required IconData icon,
-    required String title,
-    required String desc,
-    required Color color,
-    required bool isDark,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, size: 18, color: color),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : const Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                desc,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Main Interactive Auth Card (Switch between Sign In & Sign Up)
-  Widget _buildInteractiveAuthCard(bool isDark, AuthState authState) {
-    return DossierCard(
-      variant: DossierCardVariant.elevated,
-      borderRadius: 20,
-      elevation: 6,
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Ambient Server Endpoint Status Pill
-          Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: (authState.isServerConnected ? const Color(0xFF10B981) : const Color(0xFFF59E0B))
-                  .withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: (authState.isServerConnected ? const Color(0xFF10B981) : const Color(0xFFF59E0B))
-                    .withValues(alpha: 0.3),
+                  );
+                },
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  authState.isServerConnected ? Icons.cloud_done_rounded : Icons.cloud_queue_rounded,
-                  size: 13,
-                  color: authState.isServerConnected ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    authState.isServerConnected
-                        ? 'Server: api.dossier.app'
-                        : 'Offline Mode',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: authState.isServerConnected
-                          ? (isDark ? const Color(0xFF34D399) : const Color(0xFF059669))
-                          : const Color(0xFFF59E0B),
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
+            const SizedBox(height: 24),
 
-          // Auth Mode Segmented Control (Sign In vs Sign Up)
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _authMode = AuthMode.signIn;
-                      });
-                      ref.read(authProvider.notifier).clearError();
-                    },
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _authMode == AuthMode.signIn
-                            ? Theme.of(context).colorScheme.primary
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: _authMode == AuthMode.signIn
-                            ? [
-                                BoxShadow(
-                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                )
-                              ]
-                            : null,
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Operator Sign-In',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: _authMode == AuthMode.signIn
-                                ? Colors.white
-                                : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _authMode = AuthMode.signUp;
-                      });
-                      ref.read(authProvider.notifier).clearError();
-                    },
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _authMode == AuthMode.signUp
-                            ? Theme.of(context).colorScheme.primary
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: _authMode == AuthMode.signUp
-                            ? [
-                                BoxShadow(
-                                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                )
-                              ]
-                            : null,
-                      ),
-                      child: Center(
-                        child: Text(
-                          'New Kiosk Setup',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: _authMode == AuthMode.signUp
-                                ? Colors.white
-                                : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Error banner if any
-          if (authState.errorMessage != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEF4444).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline_rounded, size: 18, color: Color(0xFFEF4444)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      authState.errorMessage!,
-                      style: const TextStyle(fontSize: 12, color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFFEF4444)),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => ref.read(authProvider.notifier).clearError(),
-                  ),
-                ],
-              ),
+            // Enter 4-Digit PIN for Selected Operator
+            Text(
+              'Enter 4-Digit PIN for ${selectedOp.fullName}',
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
             ),
             const SizedBox(height: 16),
-          ],
 
-          // Animated Form Content
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            child: _authMode == AuthMode.signIn
-                ? _buildSignInView(isDark, authState)
-                : _buildSignUpView(isDark, authState),
-          ),
-        ],
+            // PIN Indicator Dots
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(4, (index) {
+                final isFilled = index < _enteredPin.length;
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isFilled ? const Color(0xFF6366F1) : Colors.transparent,
+                    border: Border.all(
+                      color: isFilled ? const Color(0xFF6366F1) : (isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
+                      width: 2,
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 24),
+
+            // Touch PIN Numpad
+            _buildNumpad(isDark),
+
+            if (auth.errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Text(auth.errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+            ],
+
+            const SizedBox(height: 16),
+            // Reset / Deactivate Option
+            TextButton(
+              onPressed: () {
+                ref.read(authProvider.notifier).resetKioskActivation();
+              },
+              child: const Text('Deactivate Software / Switch Center', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// Sign In View with sub-tabs for Password vs Quick 4-Digit PIN
-  Widget _buildSignInView(bool isDark, AuthState authState) {
+  Widget _buildNumpad(bool isDark) {
+    final keys = [
+      ['1', '2', '3'],
+      ['4', '5', '6'],
+      ['7', '8', '9'],
+      ['C', '0', '⌫'],
+    ];
+
     return Column(
-      key: const ValueKey('sign_in_view'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Method Selector (Password vs PIN)
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                _signInMethod == SignInMethod.password ? 'Enter Credentials' : 'Quick PIN Unlock',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Switch to Password Sign-In',
-              icon: Icon(
-                Icons.password_rounded,
-                size: 20,
-                color: _signInMethod == SignInMethod.password ? const Color(0xFF6366F1) : (isDark ? Colors.grey : Colors.blueGrey),
-              ),
-              onPressed: () => setState(() {
-                _signInMethod = SignInMethod.password;
-                _enteredPin = '';
-              }),
-            ),
-            IconButton(
-              tooltip: 'Switch to Quick 4-Digit PIN Pad',
-              icon: Icon(
-                Icons.dialpad_rounded,
-                size: 20,
-                color: _signInMethod == SignInMethod.pin ? const Color(0xFF6366F1) : (isDark ? Colors.grey : Colors.blueGrey),
-              ),
-              onPressed: () => setState(() {
-                _signInMethod = SignInMethod.pin;
-                _enteredPin = '';
-              }),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 12),
-
-        if (_signInMethod == SignInMethod.password) ...[
-          // Form: Identifier
-          DossierInputField(
-            controller: _signInIdentifierCtrl,
-            label: 'Mobile Number or Email',
-            hintText: 'e.g. 9876543210 or admin@dossier.local',
-            prefixIcon: const Icon(Icons.phone_iphone_rounded, size: 18),
-            keyboardType: TextInputType.text,
-          ),
-          const SizedBox(height: 14),
-
-          // Form: Password
-          DossierInputField(
-            controller: _signInPasswordCtrl,
-            label: 'Operator Password',
-            hintText: 'Enter password',
-            obscureText: _obscureSignInPassword,
-            prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscureSignInPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                size: 18,
-              ),
-              onPressed: () => setState(() => _obscureSignInPassword = !_obscureSignInPassword),
-            ),
-            onFieldSubmitted: (_) => _handlePasswordSignIn(),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Remember Me & Demo login shortcut
-          Row(
-            children: [
-              SizedBox(
-                height: 24,
-                width: 24,
-                child: Checkbox(
-                  value: authState.rememberMe,
-                  onChanged: (val) => ref.read(authProvider.notifier).toggleRememberMe(val ?? true),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Remember kiosk session',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              TextButton(
-                onPressed: () => setState(() {
-                  _signInMethod = SignInMethod.pin;
-                }),
-                child: const Text('Use PIN', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // Submit Button
-          DossierButton(
-            text: 'Sign In to Kiosk',
-            icon: Icons.login_rounded,
-            isFullWidth: true,
-            size: DossierButtonSize.lg,
-            isLoading: authState.isLoading,
-            onPressed: _handlePasswordSignIn,
-          ),
-        ] else ...[
-          // Quick PIN Unlock Mode
-          _buildPinKeypadView(isDark, authState),
-        ],
-      ],
-    );
-  }
-
-  /// 4-Digit PIN Keypad with Operator Selector
-  Widget _buildPinKeypadView(bool isDark, AuthState authState) {
-    return Column(
-      children: [
-        // Operator Chips
-        if (authState.registeredOperators.isNotEmpty) ...[
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: authState.registeredOperators.map((op) {
-                final isSelected = _selectedOperatorId == op.id;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    avatar: CircleAvatar(
-                      backgroundColor: op.role.color,
-                      child: Text(
-                        op.initials,
-                        style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+      children: keys.map((row) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: row.map((key) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: InkWell(
+                  onTap: () {
+                    if (key == 'C') {
+                      setState(() => _enteredPin = '');
+                    } else if (key == '⌫') {
+                      _handlePinBackspace();
+                    } else {
+                      _handlePinDigit(key);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(32),
+                  child: Container(
+                    width: 64,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      key,
+                      style: GoogleFonts.spaceMono(
+                        fontSize: key == '⌫' || key == 'C' ? 16 : 20,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    label: Text(op.fullName),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() {
-                          _selectedOperatorId = op.id;
-                          _enteredPin = '';
-                        });
-                      }
-                    },
                   ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-
-        // PIN Indicator Dots
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(4, (index) {
-            final isFilled = index < _enteredPin.length;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              margin: const EdgeInsets.symmetric(horizontal: 10),
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isFilled ? const Color(0xFF6366F1) : Colors.transparent,
-                border: Border.all(
-                  color: isFilled
-                      ? const Color(0xFF6366F1)
-                      : (isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
-                  width: 2,
                 ),
-                boxShadow: isFilled
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.5),
-                          blurRadius: 8,
-                          spreadRadius: 2,
-                        )
-                      ]
-                    : null,
-              ),
-            );
-          }),
-        ),
-
-        const SizedBox(height: 20),
-
-        // 3x4 Numeric Keypad
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 260),
-          child: Column(
-            children: [
-              _buildKeypadRow(['1', '2', '3'], isDark),
-              const SizedBox(height: 10),
-              _buildKeypadRow(['4', '5', '6'], isDark),
-              const SizedBox(height: 10),
-              _buildKeypadRow(['7', '8', '9'], isDark),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Clear / Reset
-                  _buildKeypadButton(
-                    child: const Icon(Icons.restart_alt_rounded, size: 20),
-                    onTap: () => setState(() => _enteredPin = ''),
-                    isDark: isDark,
-                  ),
-                  _buildKeypadButton(
-                    child: const Text('0', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    onTap: () => _handlePinDigit('0'),
-                    isDark: isDark,
-                  ),
-                  // Backspace
-                  _buildKeypadButton(
-                    child: const Icon(Icons.backspace_outlined, size: 18),
-                    onTap: _handlePinBackspace,
-                    isDark: isDark,
-                  ),
-                ],
-              ),
-            ],
+              );
+            }).toList(),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildKeypadRow(List<String> digits, bool isDark) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: digits.map((d) {
-        return _buildKeypadButton(
-          child: Text(d, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          onTap: () => _handlePinDigit(d),
-          isDark: isDark,
         );
       }).toList(),
     );
   }
 
-  Widget _buildKeypadButton({
-    required Widget child,
-    required VoidCallback onTap,
-    required bool isDark,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        width: 70,
-        height: 48,
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-          ),
+  Widget _buildServerPill(AuthState auth, bool isDark) {
+    final connected = auth.isServerConnected && !auth.isOfflineMode;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: (connected ? const Color(0xFF10B981) : const Color(0xFFF59E0B)).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: (connected ? const Color(0xFF10B981) : const Color(0xFFF59E0B)).withValues(alpha: 0.4),
         ),
-        child: Center(child: child),
       ),
-    );
-  }
-
-  /// Sign Up / New Kiosk Setup View
-  Widget _buildSignUpView(bool isDark, AuthState authState) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        key: const ValueKey('sign_up_view'),
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'Register Kiosk & Master Operator',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : const Color(0xFF0F172A),
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: connected ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Create your primary local vault workstation credentials.',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              connected ? 'Cloudflare Edge API Online (${auth.serverUrl})' : 'Offline Mode (Local Cryptographic Cache Active)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: connected ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          const SizedBox(height: 14),
-
-          // Kiosk Name
-          DossierInputField(
-            controller: _signUpKioskNameCtrl,
-            label: 'CSC / Kiosk Business Name',
-            hintText: 'e.g. Sri Balaji Digital Seva',
-            prefixIcon: const Icon(Icons.storefront_rounded, size: 18),
-          ),
-          const SizedBox(height: 12),
-
-          // Operator Name & Phone in 2-column if space permits
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth > 380) {
-                return Row(
-                  children: [
-                    Expanded(
-                      child: DossierInputField(
-                        controller: _signUpOperatorNameCtrl,
-                        label: 'Master Operator Name',
-                        hintText: 'e.g. Vikram Singh',
-                        prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DossierInputField(
-                        controller: _signUpPhoneCtrl,
-                        label: 'Mobile Number',
-                        hintText: 'e.g. 9845012345',
-                        keyboardType: TextInputType.phone,
-                        prefixIcon: const Icon(Icons.phone_iphone_rounded, size: 18),
-                      ),
-                    ),
-                  ],
-                );
-              } else {
-                return Column(
-                  children: [
-                    DossierInputField(
-                      controller: _signUpOperatorNameCtrl,
-                      label: 'Master Operator Name',
-                      hintText: 'e.g. Vikram Singh',
-                      prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
-                    ),
-                    const SizedBox(height: 12),
-                    DossierInputField(
-                      controller: _signUpPhoneCtrl,
-                      label: 'Mobile Number',
-                      hintText: 'e.g. 9845012345',
-                      keyboardType: TextInputType.phone,
-                      prefixIcon: const Icon(Icons.phone_iphone_rounded, size: 18),
-                    ),
-                  ],
-                );
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-
-          // Email & UPI ID
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth > 380) {
-                return Row(
-                  children: [
-                    Expanded(
-                      child: DossierInputField(
-                        controller: _signUpEmailCtrl,
-                        label: 'Email (Optional)',
-                        hintText: 'operator@kiosk.com',
-                        keyboardType: TextInputType.emailAddress,
-                        prefixIcon: const Icon(Icons.email_outlined, size: 18),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: DossierInputField(
-                        controller: _signUpUpiCtrl,
-                        label: 'Merchant UPI VPA',
-                        hintText: 'kiosk@oksbi',
-                        prefixIcon: const Icon(Icons.qr_code_rounded, size: 18),
-                      ),
-                    ),
-                  ],
-                );
-              } else {
-                return Column(
-                  children: [
-                    DossierInputField(
-                      controller: _signUpEmailCtrl,
-                      label: 'Email (Optional)',
-                      hintText: 'operator@kiosk.com',
-                      keyboardType: TextInputType.emailAddress,
-                      prefixIcon: const Icon(Icons.email_outlined, size: 18),
-                    ),
-                    const SizedBox(height: 12),
-                    DossierInputField(
-                      controller: _signUpUpiCtrl,
-                      label: 'Merchant UPI VPA',
-                      hintText: 'kiosk@oksbi',
-                      prefixIcon: const Icon(Icons.qr_code_rounded, size: 18),
-                    ),
-                  ],
-                );
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-
-          // Password & 4-Digit PIN
-          Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: DossierInputField(
-                  controller: _signUpPasswordCtrl,
-                  label: 'Password',
-                  hintText: 'Create password',
-                  obscureText: _obscureSignUpPassword,
-                  prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureSignUpPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                      size: 18,
-                    ),
-                    onPressed: () => setState(() => _obscureSignUpPassword = !_obscureSignUpPassword),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: DossierInputField(
-                  controller: _signUpPinCtrl,
-                  label: '4-Digit PIN',
-                  hintText: 'e.g. 4321',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(4),
-                  ],
-                  prefixIcon: const Icon(Icons.dialpad_rounded, size: 18),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          // Role Selector
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              Text(
-                'Role: ',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
-                ),
-              ),
-              ...OperatorRole.values.map((role) {
-                final isSelected = _signUpRole == role;
-                return ChoiceChip(
-                  avatar: Icon(role.icon, size: 14, color: isSelected ? Colors.white : role.color),
-                  label: Text(role.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  selected: isSelected,
-                  onSelected: (val) {
-                    if (val) setState(() => _signUpRole = role);
-                  },
-                );
-              }),
-            ],
-          ),
-
-          const SizedBox(height: 18),
-
-          // Submit Button
-          DossierButton(
-            text: 'Create Kiosk & Get Started',
-            icon: Icons.check_circle_rounded,
-            isFullWidth: true,
-            size: DossierButtonSize.lg,
-            isLoading: authState.isLoading,
-            onPressed: _handleSignUp,
           ),
         ],
       ),

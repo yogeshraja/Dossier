@@ -8,27 +8,36 @@ import 'package:dossier/features/auth/models/operator_model.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
 
 void main() {
-  group('Server Authentication & Sign-Up Tests', () {
-    test('1. ServerAuthApiService.signUp creates account and returns verified token', () async {
+  group('Software Activation & Two-Tier Operator Auth Tests', () {
+    test('1. Admin activateSoftware registers kiosk and returns activation token with operators list', () async {
       final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/v1/auth/signup') {
+        if (request.url.path == '/api/v1/auth/activate') {
           final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
-              'token': 'jwt-server-token-12345',
-              'operator': {
-                'id': 'op-server-999',
-                'fullName': reqBody['fullName'],
-                'phoneNumber': reqBody['phoneNumber'],
-                'email': reqBody['email'],
-                'role': reqBody['role'],
-                'kioskName': reqBody['kioskName'],
-                'merchantUpiVpa': reqBody['merchantUpiVpa'],
+              'success': true,
+              'isActivated': true,
+              'activationToken': 'jwt-activation-token-999',
+              'admin': {
+                'id': 'usr-admin-1',
+                'name': reqBody['adminName'],
+                'mobile': reqBody['mobile'],
+                'role': 'admin',
               },
-              'tenant': {
-                'tenantId': 'tenant-555',
-                'plan': 'KIOSK_PRO',
+              'kiosk': {
+                'id': 'ksk-100',
+                'name': reqBody['kioskName'],
+                'phone': reqBody['mobile'],
               },
+              'operators': [
+                {
+                  'id': 'usr-admin-1',
+                  'name': reqBody['adminName'],
+                  'mobile': reqBody['mobile'],
+                  'role': 'admin',
+                  'pin': reqBody['pin'],
+                }
+              ],
             }),
             201,
             headers: {'content-type': 'application/json'},
@@ -38,76 +47,114 @@ void main() {
       });
 
       final api = ServerAuthApiService(client: mockClient);
-      final result = await api.signUp(
-        kioskName: 'Apex Digital Seva',
-        operatorName: 'Arjun Verma',
+      final result = await api.activateSoftware(
+        adminName: 'Rajesh Kumar',
         phone: '9876543210',
-        email: 'arjun@apex.com',
-        password: 'Password123',
-        pin: '1122',
-        role: OperatorRole.admin,
-        merchantUpiVpa: 'apex@upi',
+        email: 'rajesh@csc.in',
+        password: 'AdminPassword1',
+        pin: '1234',
+        kioskName: 'Balaji CSC Center',
+        isNewRegistration: true,
       );
 
       expect(result.isSuccess, isTrue);
-      expect(result.token, 'jwt-server-token-12345');
-      expect(result.operator?.fullName, 'Arjun Verma');
-      expect(result.operator?.kioskName, 'Apex Digital Seva');
-      expect(result.isOfflineFallback, isFalse);
+      expect(result.isActivated, isTrue);
+      expect(result.token, 'jwt-activation-token-999');
+      expect(result.operator?.fullName, 'Rajesh Kumar');
+      expect(result.operator?.role, OperatorRole.admin);
+      expect(result.operators.length, 1);
     });
 
-    test('2. ServerAuthApiService.signIn authenticates with server', () async {
+    test('2. Admin provisions desk operator on server via createOperatorOnServer', () async {
       final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/v1/auth/signin') {
+        if (request.url.path == '/api/v1/auth/operators') {
+          final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({
-              'token': 'jwt-session-token-888',
+              'success': true,
               'operator': {
-                'id': 'op-101',
-                'fullName': 'Pooja Sharma',
-                'phoneNumber': '9123456780',
-                'role': 'manager',
-                'pin': '4321',
-                'kioskName': 'Balaji Kiosk',
+                'id': 'op-staff-2',
+                'name': reqBody['name'],
+                'role': reqBody['role'],
+                'mobile': reqBody['mobile'],
+                'email': reqBody['email'],
+              },
+            }),
+            201,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Unauthorized', 401);
+      });
+
+      final api = ServerAuthApiService(client: mockClient);
+      final result = await api.createOperatorOnServer(
+        token: 'valid-jwt-token',
+        name: 'Suresh Desk',
+        pin: '5678',
+        role: OperatorRole.operator,
+        phone: '9123456780',
+        kioskName: 'Balaji CSC Center',
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.operator?.fullName, 'Suresh Desk');
+      expect(result.operator?.role, OperatorRole.operator);
+      expect(result.operator?.pin, '5678');
+    });
+
+    test('3. AuthNotifier orchestrates Software Activation -> Operator Creation -> Operator PIN shift login', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/activate') {
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'isActivated': true,
+              'activationToken': 'token-xyz',
+              'admin': {
+                'id': 'adm-1',
+                'name': 'Master Admin',
+                'mobile': '9998887776',
+                'role': 'admin',
+              },
+              'kiosk': {'id': 'ksk-1', 'name': 'Apex Kiosk'},
+              'operators': [
+                {'id': 'adm-1', 'name': 'Master Admin', 'role': 'admin', 'pin': '1111'}
+              ],
+            }),
+            201,
+            headers: {'content-type': 'application/json'},
+          );
+        } else if (request.url.path == '/api/v1/auth/operators') {
+          final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'operator': {
+                'id': 'op-counter-1',
+                'name': reqBody['name'],
+                'role': 'operator',
+                'pin': reqBody['pin'],
+              },
+            }),
+            201,
+            headers: {'content-type': 'application/json'},
+          );
+        } else if (request.url.path == '/api/v1/auth/operator-login') {
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'token': 'shift-jwt-token',
+              'operator': {
+                'id': 'op-counter-1',
+                'name': 'Counter Staff 1',
+                'role': 'operator',
               },
             }),
             200,
             headers: {'content-type': 'application/json'},
           );
         }
-        return http.Response('Invalid credentials', 401);
-      });
-
-      final api = ServerAuthApiService(client: mockClient);
-      final result = await api.signIn(
-        identifier: '9123456780',
-        password: 'secretPassword',
-      );
-
-      expect(result.isSuccess, isTrue);
-      expect(result.token, 'jwt-session-token-888');
-      expect(result.operator?.fullName, 'Pooja Sharma');
-      expect(result.operator?.role, OperatorRole.manager);
-    });
-
-    test('3. AuthNotifier integrates server sign-up and stores local session', () async {
-      final mockClient = MockClient((request) async {
-        if (request.url.path == '/api/v1/auth/signup') {
-          return http.Response(
-            jsonEncode({
-              'token': 'jwt-new-account-token',
-              'operator': {
-                'id': 'op-remote-1',
-                'fullName': 'Rohan Das',
-                'phoneNumber': '9988776655',
-                'role': 'admin',
-                'kioskName': 'Rohan CSC Hub',
-              },
-            }),
-            201,
-            headers: {'content-type': 'application/json'},
-          );
-        }
         return http.Response('Not Found', 404);
       });
 
@@ -121,66 +168,45 @@ void main() {
       addTearDown(container.dispose);
 
       final notifier = container.read(authProvider.notifier);
-      final success = await notifier.signUp(
-        kioskName: 'Rohan CSC Hub',
-        operatorName: 'Rohan Das',
-        phone: '9988776655',
-        password: 'PassWord!1',
-        pin: '5566',
-      );
 
-      expect(success, isTrue);
-      final state = container.read(authProvider);
-      expect(state.isAuthenticated, isTrue);
-      expect(state.serverAuthToken, 'jwt-new-account-token');
-      expect(state.currentOperator?.fullName, 'Rohan Das');
-      expect(state.registeredOperators.length, 1);
-    });
-
-    test('4. AuthNotifier handles offline cache fallback during server outage', () async {
-      // Mock client that throws network error to simulate offline
-      final mockClient = MockClient((request) async {
-        throw http.ClientException('No Internet Connection');
-      });
-
-      final container = ProviderContainer(
-        overrides: [
-          serverAuthApiServiceProvider.overrideWithValue(
-            ServerAuthApiService(client: mockClient),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final notifier = container.read(authProvider.notifier);
-      
-      // Sign up while offline creates local profile
-      final success = await notifier.signUp(
-        kioskName: 'Offline Kiosk',
-        operatorName: 'Offline Operator',
-        phone: '9000000000',
-        password: 'OfflinePassword',
-        pin: '9999',
-      );
-
-      expect(success, isTrue);
-      var state = container.read(authProvider);
-      expect(state.isAuthenticated, isTrue);
-      expect(state.isOfflineMode, isTrue);
-
-      // Logout and sign back in offline with cached credentials
-      notifier.logout();
+      // Step 1: Software is initially unactivated
+      expect(container.read(authProvider).isSoftwareActivated, isFalse);
       expect(container.read(authProvider).isAuthenticated, isFalse);
 
-      final signInSuccess = await notifier.signInWithCredentials(
-        identifier: '9000000000',
-        password: 'OfflinePassword',
+      // Step 2: Admin activates software
+      final activated = await notifier.activateSoftware(
+        adminName: 'Master Admin',
+        phone: '9998887776',
+        password: 'Pass',
+        pin: '1111',
+        kioskName: 'Apex Kiosk',
+        isNewRegistration: true,
       );
+      expect(activated, isTrue);
+      expect(container.read(authProvider).isSoftwareActivated, isTrue);
+      expect(container.read(authProvider).isAuthenticated, isTrue);
 
-      expect(signInSuccess, isTrue);
-      state = container.read(authProvider);
-      expect(state.isAuthenticated, isTrue);
-      expect(state.currentOperator?.fullName, 'Offline Operator');
+      // Step 3: Admin provisions a staff operator
+      final added = await notifier.addOperator(
+        name: 'Counter Staff 1',
+        pin: '9999',
+        role: OperatorRole.operator,
+      );
+      expect(added, isTrue);
+      expect(container.read(authProvider).registeredOperators.length, 2);
+
+      // Step 4: Logout shift and login with staff operator PIN
+      notifier.logout();
+      expect(container.read(authProvider).isAuthenticated, isFalse);
+      expect(container.read(authProvider).isSoftwareActivated, isTrue); // Software remains activated
+
+      final shiftLogin = await notifier.loginOperatorWithPin(
+        operatorId: 'op-counter-1',
+        pin: '9999',
+      );
+      expect(shiftLogin, isTrue);
+      expect(container.read(authProvider).isAuthenticated, isTrue);
+      expect(container.read(authProvider).currentOperator?.fullName, 'Counter Staff 1');
     });
   });
 }

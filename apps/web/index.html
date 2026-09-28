@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dossier — Offline-First CRM, Kiosk Vault & Touch POS</title>
+  <meta name="description" content="High-density workstation and POS for Cyber Cafes, CSCs, and document processing centers. Web-first with Cloudflare D1 outbox sync.">
+  
+  <!-- Open Graph -->
+  <meta property="og:title" content="Dossier — Offline-First CRM & Kiosk Vault">
+  <meta property="og:description" content="High-density workstation for cyber cafes, CSCs, and document desks. Two-tier authentication, ESC/POS printing, and edge sync.">
+  <meta property="og:type" content="website">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+  <!-- Ambient Gradient Glow -->
+  <div class="ambient-glow"></div>
+
+  <!-- Navbar -->
+  <nav class="navbar" id="main-nav">
+    <a href="#" class="brand" id="brand-logo">
+      <div class="brand-icon">D</div>
+      <span>DOSSIER</span>
+    </a>
+
+    <div class="nav-links">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#architecture" class="nav-link">Architecture</a>
+      <a href="#docs" class="nav-link active">Documentation</a>
+      <a href="https://github.com" target="_blank" rel="noreferrer" class="nav-link">GitHub</a>
+    </div>
+
+    <div class="nav-actions">
+      <button class="theme-toggle-btn" id="theme-toggle" aria-label="Toggle Dark/Light Theme">🌙 Dark</button>
+      <a href="#docs" class="btn-primary" id="get-started-nav-btn">
+        <span>Get Started</span>
+        <span>→</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <header class="hero" id="hero-section">
+    <div class="hero-badge">
+      <span>⚡</span>
+      <span>Two-Tier Auth & Cloudflare D1 Edge Sync</span>
+    </div>
+    
+    <h1 class="hero-title">
+      High-Density Workstation & POS<br>for Modern Document Desks
+    </h1>
+
+    <p class="hero-subtitle">
+      Dossier empowers Common Service Centres (CSCs), cyber cafes, and kiosk operators with an offline-first vault, instant operator PIN shifts, raw ESC/POS thermal printing, and zero-latency local execution.
+    </p>
+
+    <div class="hero-ctas">
+      <a href="#docs" class="btn-primary" id="cta-docs-btn">
+        <span>Explore Documentation</span>
+        <span>📖</span>
+      </a>
+      <a href="#architecture" class="btn-secondary" id="cta-arch-btn">
+        <span>View Architecture</span>
+        <span>📐</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Key Architectural Pillars -->
+  <section class="features-section" id="features">
+    <div class="section-header">
+      <h2 class="section-title">Built for Real-World Front Desks</h2>
+      <p class="section-desc">Designed web-first with progressive local native enhancements.</p>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon-box">🔐</div>
+        <h3 class="feature-title">Two-Tier Authentication</h3>
+        <p class="feature-body">Master Admin software activation gate combined with ultra-fast 4-digit PIN desk operator shift switching.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-box">📦</div>
+        <h3 class="feature-title">100% Offline Vault</h3>
+        <p class="feature-body">Zero server latency. Local Drift SQLite handles customer records, cases, and POS intake even with severed internet.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-box">☁️</div>
+        <h3 class="feature-title">Cloudflare D1 Edge Sync</h3>
+        <p class="feature-body">Bi-directional outbox sync engine reconciles mutations seamlessly when connectivity resumes.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-box">🖨️</div>
+        <h3 class="feature-title">Raw ESC/POS Driver</h3>
+        <p class="feature-body">Native byte formatting for 58mm/80mm thermal receipt printers with paper cutting and cash drawer kick pulses.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-box">⚡</div>
+        <h3 class="feature-title">Background Isolates</h3>
+        <p class="feature-body">Heavy image compression, ID card front/back stitching, and PDF tiling run in background threads to preserve 120fps UI.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon-box">🌐</div>
+        <h3 class="feature-title">Web-First Philosophy</h3>
+        <p class="feature-body">Runs smoothly across modern web browsers via Flutter WASM + OPFS, desktop Linux/Windows, and mobile devices.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Documentation Portal -->
+  <main class="docs-container" id="docs">
+    <!-- Sidebar -->
+    <aside class="docs-sidebar" id="docs-sidebar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="docs-search" class="search-input" placeholder="Filter documentation..." autocomplete="off">
+      </div>
+
+      <nav id="docs-nav-groups" aria-label="Documentation Navigation">
+        <!-- Rendered dynamically by main.js -->
+      </nav>
+    </aside>
+
+    <!-- Main Docs Viewer -->
+    <section class="docs-content" id="docs-viewer" aria-live="polite">
+      <!-- Active documentation article rendered dynamically by main.js -->
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer" id="footer">
+    <div class="footer-links">
+      <a href="#hero-section" class="footer-link">Home</a>
+      <a href="#features" class="footer-link">Features</a>
+      <a href="#docs" class="footer-link">Docs</a>
+      <a href="https://github.com" target="_blank" rel="noreferrer" class="footer-link">GitHub</a>
+    </div>
+    <p>© 2026 Dossier Project. Designed web-first for high-density document desks and cyber cafe kiosks.</p>
+  </footer>
+
+  <!-- Scripts -->
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
