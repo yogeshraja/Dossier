@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +11,7 @@ import 'package:dossier/features/auth/domain/strategies/email_password_auth_stra
 import 'package:dossier/features/auth/domain/strategies/phone_password_auth_strategy.dart';
 import 'package:dossier/features/auth/domain/strategies/google_sso_auth_strategy.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
+import 'package:dossier/features/auth/screens/auth_screen.dart';
 
 void main() {
   group('Auth Strategy Inheritance & Multi-Step Activation Tests', () {
@@ -224,6 +226,60 @@ void main() {
       expect(container.read(authProvider).isSoftwareActivated, isTrue);
       expect(container.read(authProvider).adminOperator?.fullName, 'Yogesh Owner');
       expect(container.read(authProvider).registeredOperators.length, 1);
+    });
+
+    testWidgets('5. AuthScreen form fields maintain strict isolation between email and password', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Tap 'Sign Up' tab
+      await tester.tap(find.text('Sign Up'));
+      await tester.pumpAndSettle();
+
+      // Locate fields by ValueKey
+      final nameField = find.byKey(const ValueKey('auth_signup_name_field'));
+      final emailField = find.byKey(const ValueKey('auth_email_field'));
+      final passwordField = find.byKey(const ValueKey('auth_password_field'));
+
+      expect(nameField, findsOneWidget);
+      expect(emailField, findsOneWidget);
+      expect(passwordField, findsOneWidget);
+
+      // Enter text into name field
+      await tester.enterText(nameField, 'Ramesh Admin');
+      await tester.pumpAndSettle();
+
+      // Enter text into email field
+      await tester.enterText(emailField, 'test@csc.in');
+      await tester.pumpAndSettle();
+
+      // Verify that email input DID NOT fill the password field
+      final passwordTextFinder = find.descendant(
+        of: passwordField,
+        matching: find.byType(EditableText),
+      );
+      final passwordEditable = tester.widget<EditableText>(passwordTextFinder);
+      expect(passwordEditable.controller.text, isEmpty);
+
+      // Verify that email field contains the exact email
+      final emailTextFinder = find.descendant(
+        of: emailField,
+        matching: find.byType(EditableText),
+      );
+      final emailEditable = tester.widget<EditableText>(emailTextFinder);
+      expect(emailEditable.controller.text, 'test@csc.in');
+
+      // Now enter password and verify
+      await tester.enterText(passwordField, 'SuperSecret123');
+      await tester.pumpAndSettle();
+      expect(passwordEditable.controller.text, 'SuperSecret123');
     });
   });
 }

@@ -90,6 +90,34 @@ class _DossierInputFieldState extends State<DossierInputField> {
   }
 
   @override
+  void didUpdateWidget(covariant DossierInputField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller?.removeListener(_handleTextChange);
+      if (oldWidget.controller == null) {
+        _effectiveController.dispose();
+      }
+      _effectiveController = widget.controller ?? TextEditingController(text: widget.initialValue);
+      _hasText = _effectiveController.text.isNotEmpty;
+      _effectiveController.addListener(_handleTextChange);
+    }
+    if (widget.focusNode != oldWidget.focusNode) {
+      oldWidget.focusNode?.removeListener(_handleFocusChange);
+      if (oldWidget.focusNode == null) {
+        _effectiveFocusNode.dispose();
+      }
+      _effectiveFocusNode = widget.focusNode ?? FocusNode();
+      _isFocused = _effectiveFocusNode.hasFocus;
+      _effectiveFocusNode.addListener(_handleFocusChange);
+    }
+    if (widget.obscureText != oldWidget.obscureText) {
+      setState(() {
+        _obscured = widget.obscureText;
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _effectiveController.removeListener(_handleTextChange);
     _effectiveFocusNode.removeListener(_handleFocusChange);

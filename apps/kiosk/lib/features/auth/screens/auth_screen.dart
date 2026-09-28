@@ -29,7 +29,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _emailCtrl = TextEditingController();
   final _mobileCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  bool _obscurePassword = true;
 
   // Step 2: Kiosk Product Registration State
   final _kioskNameCtrl = TextEditingController();
@@ -207,6 +206,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
                 const SizedBox(height: 16),
                 DossierInputField(
+                  key: const ValueKey('new_op_name_field'),
                   label: 'Operator Full Name',
                   hintText: 'e.g. Ramesh Kumar',
                   controller: _newOpNameCtrl,
@@ -217,6 +217,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   children: [
                     Expanded(
                       child: DossierInputField(
+                        key: const ValueKey('new_op_pin_field'),
                         label: '4-Digit PIN',
                         hintText: '****',
                         controller: _newOpPinCtrl,
@@ -253,6 +254,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
                 const SizedBox(height: 12),
                 DossierInputField(
+                  key: const ValueKey('new_op_phone_field'),
                   label: 'Mobile Number (Optional)',
                   hintText: '9876543210',
                   controller: _newOpPhoneCtrl,
@@ -675,6 +677,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           // Form Fields
           if (isSignUp) ...[
             DossierInputField(
+              key: const ValueKey('auth_signup_name_field'),
               label: 'Full Name',
               hintText: 'e.g. Ramesh Kumar',
               controller: _nameCtrl,
@@ -685,6 +688,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
           if (_authMethod == InputAuthMethod.email)
             DossierInputField(
+              key: const ValueKey('auth_email_field'),
               label: 'Email Address',
               hintText: 'admin@csc.in',
               controller: _emailCtrl,
@@ -693,6 +697,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             )
           else
             DossierInputField(
+              key: const ValueKey('auth_mobile_field'),
               label: 'Mobile Number',
               hintText: '9876543210',
               controller: _mobileCtrl,
@@ -702,18 +707,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           const SizedBox(height: 12),
 
           DossierInputField(
+            key: const ValueKey('auth_password_field'),
             label: 'Password',
             hintText: '••••••••',
             controller: _passwordCtrl,
-            obscureText: _obscurePassword,
+            obscureText: true,
             prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                size: 18,
-              ),
-              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-            ),
           ),
           const SizedBox(height: 20),
 
@@ -837,6 +836,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           ],
 
           DossierInputField(
+            key: const ValueKey('kiosk_setup_name_field'),
             label: 'Kiosk / CSC Business Name',
             hintText: 'e.g. Main CSC Document Center',
             controller: _kioskNameCtrl,
@@ -845,6 +845,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           const SizedBox(height: 12),
 
           DossierInputField(
+            key: const ValueKey('kiosk_setup_address_field'),
             label: 'Center Physical Address',
             hintText: 'Shop #12, Market Road',
             controller: _kioskAddressCtrl,
@@ -856,6 +857,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             children: [
               Expanded(
                 child: DossierInputField(
+                  key: const ValueKey('kiosk_setup_upi_field'),
                   label: 'Merchant UPI VPA',
                   hintText: 'kiosk@oksbi',
                   controller: _merchantUpiCtrl,
@@ -865,6 +867,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: DossierInputField(
+                  key: const ValueKey('kiosk_setup_pin_field'),
                   label: 'Master 4-Digit PIN',
                   hintText: '1234',
                   controller: _masterPinCtrl,
