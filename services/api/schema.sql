@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     email TEXT,
     mobile TEXT,
+    is_mobile_verified INTEGER NOT NULL DEFAULT 0,
     role TEXT NOT NULL DEFAULT 'operator', -- 'admin', 'manager', 'operator'
     pin_hash TEXT NOT NULL,
     password_hash TEXT,
@@ -39,6 +40,16 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (kiosk_id) REFERENCES kiosks(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS otp_verifications (
+    id TEXT PRIMARY KEY,
+    mobile TEXT NOT NULL,
+    otp_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    is_verified INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -110,3 +121,4 @@ CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_sync_items_kiosk ON sync_items(kiosk_id, server_timestamp);
 CREATE INDEX IF NOT EXISTS idx_cases_dossier ON cases(dossier_id);
+CREATE INDEX IF NOT EXISTS idx_otp_mobile ON otp_verifications(mobile);

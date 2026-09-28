@@ -291,12 +291,14 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      // Set user as logged in but not software activated (enters FTUE mode)
+      // Set user as logged in and mobile-verified, but not software activated (enters FTUE mode)
       container.read(authProvider.notifier).state = const AuthState(
         user: AuthUser(
           id: 'usr-new-owner',
           name: 'Priya Sharma',
           email: 'priya@csc.in',
+          phone: '9876543210',
+          isMobileVerified: true,
           role: 'admin',
           hasKiosk: false,
         ),
@@ -597,6 +599,126 @@ void main() {
       final loginSuccessAfterUnsuspend = await notifier.loginOperatorWithPin(operatorId: op.id, pin: '5678');
       expect(loginSuccessAfterUnsuspend, isTrue);
       expect(container.read(authProvider).currentOperator?.id, op.id);
+    });
+
+    test('12. Twilio OTP send and verify flow verifies mobile number and sets isMobileVerified', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/otp/send') {
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'message': 'OTP sent to +919876543210',
+              'mobile': '+919876543210',
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        if (request.url.path == '/api/v1/auth/otp/verify') {
+          final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
+          if (reqBody['otp'] == '123456') {
+            return http.Response(
+              jsonEncode({
+                'success': true,
+                'isVerified': true,
+                'mobile': '+919876543210',
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          } else {
+            return http.Response(
+              jsonEncode({'success': false, 'error': 'Incorrect verification code.'}),
+              401,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+        }
+        if (request.url.path == '/api/v1/auth/user/verify-mobile') {
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'message': 'Mobile verified successfully.',
+              'user': {
+                'id': 'usr-otp-1',
+                'name': 'OTP User',
+                'mobile': '+919876543210',
+                'isMobileVerified': true,
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final apiService = ServerAuthApiService(client: mockClient);
+      final container = ProviderContainer(
+        overrides: [
+          serverAuthApiServiceProvider.overrideWithValue(apiService),
+        ],
+      );
+
+      final notifier = container.read(authProvider.notifier);
+
+      // 1. Send OTP
+      final sendSuccess = await notifier.sendOtp('9876543210');
+      expect(sendSuccess, isTrue);
+
+      // 2. Verify with wrong OTP -> fails
+      final wrongVerify = await notifier.verifyOtp(mobile: '9876543210', otp: '000000');
+      expect(wrongVerify, isFalse);
+
+      // 3. Verify with correct OTP -> succeeds
+      final correctVerify = await notifier.verifyOtp(mobile: '9876543210', otp: '123456');
+      expect(correctVerify, isTrue);
+    });
+
+    testWidgets('13. AuthScreen displays Mobile Verification Card when user is logged in but not mobile-verified', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final container = ProviderContainer();
+      // Set state to user logged in via Google SSO but not mobile verified
+      container.read(authProvider.notifier).state = const AuthState(
+        isAuthenticated: true,
+        isSoftwareActivated: false,
+        user: AuthUser(
+          id: 'usr-google-1',
+          name: 'Google Admin',
+          email: 'googleadmin@gmail.com',
+          isMobileVerified: false,
+          role: 'admin',
+        ),
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify Mobile Verification card elements exist
+      expect(find.text('Verify Your Mobile Number'), findsOneWidget);
+      expect(find.text('TWILIO OTP'), findsOneWidget);
+      expect(find.byKey(const ValueKey('otp_mobile_field')), findsOneWidget);
+      expect(find.byKey(const ValueKey('send_otp_button')), findsOneWidget);
+
+      // Enter mobile number and tap Send OTP
+      await tester.enterText(find.byKey(const ValueKey('otp_mobile_field')), '9876543210');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('send_otp_button')));
+      await tester.pumpAndSettle();
+
+      // Verify OTP entry field & verify button appear
+      expect(find.byKey(const ValueKey('otp_code_field')), findsOneWidget);
+      expect(find.byKey(const ValueKey('verify_otp_button')), findsOneWidget);
     });
   });
 }

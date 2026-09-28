@@ -696,6 +696,112 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = const AuthState();
   }
 
+  /// Send OTP to mobile number via Twilio
+  Future<bool> sendOtp(String mobile) async {
+    final cleanMobile = mobile.trim();
+    if (cleanMobile.replaceAll(RegExp(r'[^\d]'), '').length < 10) {
+      state = state.copyWith(errorMessage: 'Please enter a valid 10-digit mobile number.');
+      return false;
+    }
+
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
+    final res = await _serverAuthApi.sendOtp(mobile: cleanMobile);
+
+    state = state.copyWith(isLoading: false);
+    if (res['success'] == true) {
+      return true;
+    } else {
+      state = state.copyWith(errorMessage: res['error'] as String? ?? 'Failed to send verification SMS.');
+      return false;
+    }
+  }
+
+  /// Verify OTP code for a mobile number and link to current user if logged in
+  Future<bool> verifyOtp({
+    required String mobile,
+    required String otp,
+  }) async {
+    final cleanMobile = mobile.trim();
+    final cleanOtp = otp.trim();
+
+    if (cleanOtp.length < 4) {
+      state = state.copyWith(errorMessage: 'Please enter the verification code.');
+      return false;
+    }
+
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
+    final userId = state.user?.id;
+    final res = await _serverAuthApi.verifyOtp(
+      mobile: cleanMobile,
+      otp: cleanOtp,
+      userId: userId,
+    );
+
+    if (res['success'] == true && res['isVerified'] == true) {
+      if (state.user != null) {
+        final updatedUser = state.user!.copyWith(
+          phone: cleanMobile,
+          isMobileVerified: true,
+        );
+        state = state.copyWith(
+          user: updatedUser,
+          isLoading: false,
+          clearErrorMessage: true,
+        );
+      } else {
+        state = state.copyWith(
+          isLoading: false,
+          clearErrorMessage: true,
+        );
+      }
+      return true;
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: res['error'] as String? ?? 'Invalid verification code. Please try again.',
+      );
+      return false;
+    }
+  }
+
+  /// Explicitly link and verify mobile for the logged-in user
+  Future<bool> linkAndVerifyMobile({
+    required String mobile,
+    required String otp,
+  }) async {
+    final user = state.user;
+    if (user == null) {
+      return verifyOtp(mobile: mobile, otp: otp);
+    }
+
+    state = state.copyWith(isLoading: true, clearErrorMessage: true);
+    final res = await _serverAuthApi.linkAndVerifyMobile(
+      userId: user.id,
+      mobile: mobile,
+      otp: otp,
+      token: state.serverAuthToken,
+    );
+
+    if (res['success'] == true) {
+      final updatedUser = user.copyWith(
+        phone: mobile.trim(),
+        isMobileVerified: true,
+      );
+      state = state.copyWith(
+        user: updatedUser,
+        isLoading: false,
+        clearErrorMessage: true,
+      );
+      return true;
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: res['error'] as String? ?? 'Failed to verify mobile number.',
+      );
+      return false;
+    }
+  }
+
   /// Clear any active error message
   void clearError() {
     if (state.errorMessage != null) {

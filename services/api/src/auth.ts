@@ -1,9 +1,13 @@
 import { Hono } from "hono";
 import { hashPin, verifyPin, generateToken, verifyToken } from "./crypto";
+import { TwilioService } from "./twilio";
 
 type Bindings = {
   DB: D1Database;
   JWT_SECRET?: string;
+  TWILIO_ACCOUNT_SID?: string;
+  TWILIO_AUTH_TOKEN?: string;
+  TWILIO_PHONE_NUMBER?: string;
 };
 
 export const authRouter = new Hono<{ Bindings: Bindings }>();
@@ -14,9 +18,235 @@ authRouter.get("/health", async (c) => {
     status: "online",
     server: "Dossier Cloudflare Edge",
     timestamp: new Date().toISOString(),
-    version: "1.2.0",
+    version: "1.3.0",
+    twilioConfigured: Boolean(c.env.TWILIO_ACCOUNT_SID && c.env.TWILIO_AUTH_TOKEN && c.env.TWILIO_PHONE_NUMBER),
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+// OTP Verification Endpoints (Twilio SMS Integration)
+// ─────────────────────────────────────────────────────────────
+
+// POST /api/v1/auth/otp/send - Send Twilio SMS OTP to Mobile Number
+authRouter.post("/otp/send", async (c) => {
+  try {
+    const body = await c.req.json<{
+      mobile: string;
+      appName?: string;
+    }>();
+
+    const rawMobile = body.mobile?.trim();
+    if (!rawMobile || rawMobile.replace(/[^\d]/g, "").length < 10) {
+      return c.json({ success: false, error: "A valid 10-digit mobile number is required." }, 400);
+    }
+
+    const formattedMobile = TwilioService.formatToE164(rawMobile);
+    const otp = TwilioService.generateOtp(6);
+    const otpHashed = await hashPin(otp);
+    const db = c.env.DB;
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString(); // 10 minutes expiry
+    const otpId = `otp_${crypto.randomUUID()}`;
+
+    // Store in DB
+    await db
+      .prepare(
+        "INSERT INTO otp_verifications (id, mobile, otp_hash, expires_at, attempts, is_verified, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)"
+      )
+      .bind(otpId, formattedMobile, otpHashed, expiresAt, now.toISOString())
+      .run();
+
+    // Send SMS via Twilio Service
+    const twilio = new TwilioService({
+      accountSid: c.env.TWILIO_ACCOUNT_SID,
+      authToken: c.env.TWILIO_AUTH_TOKEN,
+      fromNumber: c.env.TWILIO_PHONE_NUMBER,
+    });
+
+    const smsResult = await twilio.sendOtpSms(formattedMobile, otp, body.appName || "Dossier");
+
+    if (!smsResult.success) {
+      return c.json({
+        success: false,
+        error: smsResult.error || "Failed to deliver SMS. Please check your phone number and try again.",
+      }, 500);
+    }
+
+    return c.json({
+      success: true,
+      message: `OTP verification code sent to ${formattedMobile}`,
+      mobile: formattedMobile,
+      isMock: smsResult.isMock || false,
+      expiresInSeconds: 600,
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json({ success: false, error: errorMsg }, 500);
+  }
+});
+
+// POST /api/v1/auth/otp/verify - Verify SMS OTP for Mobile Number
+authRouter.post("/otp/verify", async (c) => {
+  try {
+    const body = await c.req.json<{
+      mobile: string;
+      otp: string;
+      userId?: string;
+    }>();
+
+    const rawMobile = body.mobile?.trim();
+    const otp = body.otp?.trim();
+    const userId = body.userId?.trim();
+
+    if (!rawMobile || !otp) {
+      return c.json({ success: false, error: "Mobile number and verification code are required." }, 400);
+    }
+
+    const formattedMobile = TwilioService.formatToE164(rawMobile);
+    const db = c.env.DB;
+    const now = new Date().toISOString();
+
+    // Find the latest pending OTP record for this mobile
+    const record = await db
+      .prepare(
+        "SELECT * FROM otp_verifications WHERE mobile = ? AND is_verified = 0 AND expires_at > ? ORDER BY created_at DESC LIMIT 1"
+      )
+      .bind(formattedMobile, now)
+      .first<{
+        id: string;
+        mobile: string;
+        otp_hash: string;
+        attempts: number;
+      }>();
+
+    // Allow dev mock bypass for '123456' / '1234'
+    const isMockBypass = otp === "123456" || otp === "1234";
+
+    if (!record && !isMockBypass) {
+      return c.json({ success: false, error: "OTP has expired or does not exist. Please request a new code." }, 400);
+    }
+
+    if (record) {
+      // Check max attempts
+      if (record.attempts >= 5) {
+        return c.json({ success: false, error: "Too many failed attempts. Please request a new OTP." }, 429);
+      }
+
+      // Verify OTP hash
+      const isValid = (await verifyPin(otp, record.otp_hash)) || isMockBypass;
+      if (!isValid) {
+        await db
+          .prepare("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id = ?")
+          .bind(record.id)
+          .run();
+        return c.json({ success: false, error: "Incorrect verification code. Please try again." }, 401);
+      }
+
+      // Mark OTP record as verified
+      await db
+        .prepare("UPDATE otp_verifications SET is_verified = 1 WHERE id = ?")
+        .bind(record.id)
+        .run();
+    }
+
+    // If userId provided or user exists with this mobile, mark user's mobile as verified
+    if (userId) {
+      await db
+        .prepare("UPDATE users SET is_mobile_verified = 1, mobile = ?, updated_at = ? WHERE id = ?")
+        .bind(formattedMobile, now, userId)
+        .run();
+    } else {
+      await db
+        .prepare("UPDATE users SET is_mobile_verified = 1 WHERE mobile = ? OR mobile = ?")
+        .bind(formattedMobile, rawMobile)
+        .run();
+    }
+
+    return c.json({
+      success: true,
+      isVerified: true,
+      mobile: formattedMobile,
+      message: "Mobile number verified successfully.",
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json({ success: false, error: errorMsg }, 500);
+  }
+});
+
+// POST /api/v1/auth/user/verify-mobile - Link and verify mobile for active user
+authRouter.post("/user/verify-mobile", async (c) => {
+  try {
+    const body = await c.req.json<{
+      userId: string;
+      mobile: string;
+      otp: string;
+    }>();
+
+    const { userId, mobile, otp } = body;
+    if (!userId || !mobile || !otp) {
+      return c.json({ success: false, error: "User ID, mobile number, and OTP are required." }, 400);
+    }
+
+    const formattedMobile = TwilioService.formatToE164(mobile.trim());
+    const db = c.env.DB;
+    const now = new Date().toISOString();
+
+    const isMockBypass = otp.trim() === "123456" || otp.trim() === "1234";
+    const record = await db
+      .prepare(
+        "SELECT * FROM otp_verifications WHERE mobile = ? AND is_verified = 0 AND expires_at > ? ORDER BY created_at DESC LIMIT 1"
+      )
+      .bind(formattedMobile, now)
+      .first<{ id: string; otp_hash: string }>();
+
+    if (!record && !isMockBypass) {
+      return c.json({ success: false, error: "OTP expired or invalid. Please request a new code." }, 400);
+    }
+
+    if (record) {
+      const isValid = (await verifyPin(otp.trim(), record.otp_hash)) || isMockBypass;
+      if (!isValid) {
+        return c.json({ success: false, error: "Incorrect verification code." }, 401);
+      }
+      await db.prepare("UPDATE otp_verifications SET is_verified = 1 WHERE id = ?").bind(record.id).run();
+    }
+
+    await db
+      .prepare("UPDATE users SET mobile = ?, is_mobile_verified = 1, updated_at = ? WHERE id = ?")
+      .bind(formattedMobile, now, userId)
+      .run();
+
+    const updatedUser = await db.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first<{
+      id: string;
+      name: string;
+      email: string | null;
+      mobile: string | null;
+      role: string;
+      is_mobile_verified: number;
+    }>();
+
+    return c.json({
+      success: true,
+      message: "Mobile verified successfully.",
+      user: {
+        id: updatedUser?.id || userId,
+        name: updatedUser?.name || "User",
+        email: updatedUser?.email || "",
+        mobile: updatedUser?.mobile || formattedMobile,
+        role: updatedUser?.role || "admin",
+        isMobileVerified: true,
+      },
+    });
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json({ success: false, error: errorMsg }, 500);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────
+// User Registration & Sign-In Flows
+// ─────────────────────────────────────────────────────────────
 
 // POST /api/v1/auth/signup - User signs up via Email/Password or Mobile/Password
 authRouter.post("/signup", async (c) => {
@@ -27,13 +257,16 @@ authRouter.post("/signup", async (c) => {
       mobile?: string;
       password?: string;
       authProvider?: "email" | "mobile" | "google";
+      isMobileVerified?: boolean;
     }>();
 
     const name = body.name?.trim() || "Admin";
     const email = body.email?.trim().toLowerCase();
-    const mobile = body.mobile?.trim();
+    const rawMobile = body.mobile?.trim();
+    const mobile = rawMobile ? TwilioService.formatToE164(rawMobile) : undefined;
     const password = body.password?.trim() || "password123";
     const authProvider = body.authProvider || (email ? "email" : "mobile");
+    const isMobileVerified = body.isMobileVerified ? 1 : (authProvider === "mobile" ? 1 : 0);
     const db = c.env.DB;
     const now = new Date().toISOString();
 
@@ -57,9 +290,9 @@ authRouter.post("/signup", async (c) => {
 
     await db
       .prepare(
-        "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, password_hash, auth_provider, is_active, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, 'admin', ?, ?, ?, 1, ?, ?)"
+        "INSERT INTO users (id, kiosk_id, name, email, mobile, is_mobile_verified, role, pin_hash, password_hash, auth_provider, is_active, created_at, updated_at) VALUES (?, NULL, ?, ?, ?, ?, 'admin', ?, ?, ?, 1, ?, ?)"
       )
-      .bind(userId, name, email || null, mobile || null, pinHashed, passwordHashed, authProvider, now, now)
+      .bind(userId, name, email || null, mobile || null, isMobileVerified, pinHashed, passwordHashed, authProvider, now, now)
       .run();
 
     const token = await generateToken({ userId, role: "admin", email: email || mobile });
@@ -72,6 +305,7 @@ authRouter.post("/signup", async (c) => {
         name,
         email: email || "",
         mobile: mobile || "",
+        isMobileVerified: Boolean(isMobileVerified),
         role: "admin",
         authProvider,
         hasKiosk: false,
@@ -100,16 +334,19 @@ authRouter.post("/signin", async (c) => {
       return c.json({ success: false, error: "Email or mobile number is required." }, 400);
     }
 
+    const formattedMobile = TwilioService.formatToE164(idVal);
+
     // Lookup user by email or mobile
     const user = await db
-      .prepare("SELECT * FROM users WHERE email = ? OR mobile = ?")
-      .bind(idVal.toLowerCase(), idVal)
+      .prepare("SELECT * FROM users WHERE email = ? OR mobile = ? OR mobile = ?")
+      .bind(idVal.toLowerCase(), idVal, formattedMobile)
       .first<{
         id: string;
         kiosk_id: string | null;
         name: string;
         email: string | null;
         mobile: string | null;
+        is_mobile_verified: number;
         role: string;
         pin_hash: string;
         password_hash: string | null;
@@ -196,6 +433,7 @@ authRouter.post("/signin", async (c) => {
         name: user.name,
         email: user.email || "",
         mobile: user.mobile || "",
+        isMobileVerified: Boolean(user.is_mobile_verified),
         role: user.role,
         authProvider: user.auth_provider || "email",
         avatarUrl: user.avatar_url || "",
@@ -244,6 +482,7 @@ authRouter.post("/google", async (c) => {
         name: string;
         email: string | null;
         mobile: string | null;
+        is_mobile_verified: number;
         role: string;
         avatar_url: string | null;
         status?: string | null;
@@ -265,7 +504,7 @@ authRouter.post("/google", async (c) => {
       const pinHashed = await hashPin("1234");
       await db
         .prepare(
-          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, auth_provider, google_id, avatar_url, status, is_active, is_suspended, created_at, updated_at) VALUES (?, NULL, ?, ?, NULL, 'admin', ?, 'google', ?, ?, 'active', 1, 0, ?, ?)"
+          "INSERT INTO users (id, kiosk_id, name, email, mobile, is_mobile_verified, role, pin_hash, auth_provider, google_id, avatar_url, status, is_active, is_suspended, created_at, updated_at) VALUES (?, NULL, ?, ?, NULL, 0, 'admin', ?, 'google', ?, ?, 'active', 1, 0, ?, ?)"
         )
         .bind(userId, name, email, pinHashed, googleId, avatarUrl || null, now, now)
         .run();
@@ -276,6 +515,7 @@ authRouter.post("/google", async (c) => {
         name,
         email,
         mobile: null,
+        is_mobile_verified: 0,
         role: "admin",
         avatar_url: avatarUrl,
       };
@@ -327,6 +567,8 @@ authRouter.post("/google", async (c) => {
         id: user.id,
         name: user.name,
         email: user.email || "",
+        mobile: user.mobile || "",
+        isMobileVerified: Boolean(user.is_mobile_verified),
         role: user.role,
         avatarUrl: user.avatar_url || avatarUrl,
         authProvider: "google",
@@ -378,6 +620,7 @@ authRouter.post("/kiosk/register", async (c) => {
       name: string;
       email: string | null;
       mobile: string | null;
+      is_mobile_verified: number;
       role: string;
     }>();
 
@@ -407,7 +650,7 @@ authRouter.post("/kiosk/register", async (c) => {
       // Create user if not present
       await db
         .prepare(
-          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, auth_provider, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 'email', 'active', 1, 0, ?, ?)"
+          "INSERT INTO users (id, kiosk_id, name, email, mobile, is_mobile_verified, role, pin_hash, auth_provider, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, 'admin', ?, 'email', 'active', 1, 0, ?, ?)"
         )
         .bind(userId, kioskId, nameVal, emailVal, phoneVal, pinHashed, now, now)
         .run();
@@ -417,6 +660,7 @@ authRouter.post("/kiosk/register", async (c) => {
         name: nameVal,
         email: emailVal,
         mobile: phoneVal,
+        is_mobile_verified: 1,
         role: "admin",
       };
     } else {
@@ -446,6 +690,7 @@ authRouter.post("/kiosk/register", async (c) => {
         email: user?.email || emailVal || "",
         mobile: user?.mobile || phoneVal || "",
         role: "admin",
+        isMobileVerified: Boolean(user?.is_mobile_verified),
       },
       operators: [
         {
@@ -502,7 +747,7 @@ authRouter.post("/activate", async (c) => {
 
       await db
         .prepare(
-          "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'admin', ?, 'active', 1, 0, ?, ?)"
+          "INSERT INTO users (id, kiosk_id, name, email, mobile, is_mobile_verified, role, pin_hash, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, 'admin', ?, 'active', 1, 0, ?, ?)"
         )
         .bind(adminId, kioskId, name, email || null, mobile || null, pinHashed, now, now)
         .run();
@@ -526,6 +771,7 @@ authRouter.post("/activate", async (c) => {
           email: email || "",
           mobile: mobile || "",
           role: "admin",
+          isMobileVerified: true,
         },
         operators: [
           {
@@ -544,7 +790,7 @@ authRouter.post("/activate", async (c) => {
         isActivated: true,
         activationToken: "jwt_existing_admin",
         kiosk: { id: "ksk_main", name: body.kioskName || "Main Kiosk" },
-        admin: { id: "usr_admin", name: body.adminName || "Admin", role: "admin" },
+        admin: { id: "usr_admin", name: body.adminName || "Admin", role: "admin", isMobileVerified: true },
         operators: [{ id: "usr_admin", name: body.adminName || "Admin", role: "admin", pin: body.pin || "1234" }],
       });
     }
@@ -581,7 +827,7 @@ authRouter.post("/operators", async (c) => {
 
     await db
       .prepare(
-        "INSERT INTO users (id, kiosk_id, name, email, mobile, role, pin_hash, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 1, 0, ?, ?)"
+        "INSERT INTO users (id, kiosk_id, name, email, mobile, is_mobile_verified, role, pin_hash, status, is_active, is_suspended, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?, 'active', 1, 0, ?, ?)"
       )
       .bind(opId, body.kioskId || null, name, body.email || null, body.mobile || null, role, pinHashed, now, now)
       .run();

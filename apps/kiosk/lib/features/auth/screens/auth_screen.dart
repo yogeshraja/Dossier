@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -29,6 +30,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _emailCtrl = TextEditingController();
   final _mobileCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+
+  // Step 1.5: Twilio Mobile OTP Verification State
+  final _otpMobileCtrl = TextEditingController();
+  final _otpCodeCtrl = TextEditingController();
+  bool _isOtpSent = false;
+  int _otpTimerSeconds = 0;
+  Timer? _otpCountdownTimer;
+  String? _otpFeedbackMessage;
 
   // Step 2: Kiosk Product Registration & FTUE State
   int _ftueStep = 0;
@@ -72,10 +81,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   @override
   void dispose() {
+    _otpCountdownTimer?.cancel();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _mobileCtrl.dispose();
     _passwordCtrl.dispose();
+    _otpMobileCtrl.dispose();
+    _otpCodeCtrl.dispose();
     _kioskNameCtrl.dispose();
     _kioskAddressCtrl.dispose();
     _kioskContactCtrl.dispose();
@@ -99,6 +111,74 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         transitionDuration: const Duration(milliseconds: 350),
       ),
     );
+  }
+
+  void _startOtpTimer() {
+    _otpCountdownTimer?.cancel();
+    setState(() {
+      _otpTimerSeconds = 30;
+    });
+    _otpCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_otpTimerSeconds > 0) {
+        setState(() {
+          _otpTimerSeconds--;
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  // Handle Send OTP via Twilio SMS
+  Future<void> _handleSendOtp() async {
+    final mobile = _otpMobileCtrl.text.trim();
+    if (mobile.replaceAll(RegExp(r'[^\d]'), '').length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid 10-digit mobile number.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final success = await ref.read(authProvider.notifier).sendOtp(mobile);
+    if (success && mounted) {
+      setState(() {
+        _isOtpSent = true;
+        _otpFeedbackMessage = 'OTP verification SMS sent to $mobile';
+      });
+      _startOtpTimer();
+    }
+  }
+
+  // Handle Verify OTP Code
+  Future<void> _handleVerifyOtp() async {
+    final mobile = _otpMobileCtrl.text.trim();
+    final otp = _otpCodeCtrl.text.trim();
+
+    if (otp.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the 6-digit verification code.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final success = await ref.read(authProvider.notifier).linkAndVerifyMobile(
+          mobile: mobile,
+          otp: otp,
+        );
+
+    if (success && mounted) {
+      _otpCountdownTimer?.cancel();
+      final auth = ref.read(authProvider);
+      if (auth.isSoftwareActivated) {
+        _onSuccessfulLogin();
+      }
+    }
   }
 
   // Handle User Login / Sign-up via Strategy
@@ -604,12 +684,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       return _buildUserAuthCard(auth, isDark);
     }
 
-    // Flow 2: User is Logged In, but Kiosk is NOT Registered/Activated -> Kiosk Setup Screen
+    // Flow 2: User is Logged In, but Mobile is NOT Verified -> Twilio SMS OTP Verification
+    if (auth.isUserLoggedIn && !(auth.user?.isMobileVerified ?? false) && !auth.isSoftwareActivated) {
+      return _buildMobileVerificationCard(auth, isDark);
+    }
+
+    // Flow 3: User is Logged In & Mobile is Verified, but Kiosk is NOT Registered/Activated -> Kiosk Setup Screen (FTUE)
     if (auth.isUserLoggedIn && !auth.isSoftwareActivated) {
       return _buildKioskSetupCard(auth, isDark);
     }
 
-    // Flow 3: Software is Activated -> Operator Shift PIN Login
+    // Flow 4: Software is Activated -> Operator Shift PIN Login
     return _buildOperatorShiftCard(auth, isDark);
   }
 
@@ -875,6 +960,241 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 1.5. Mobile OTP Verification Card (Twilio SMS Gate)
+  // ─────────────────────────────────────────────────────────────
+  Widget _buildMobileVerificationCard(AuthState auth, bool isDark) {
+    if (_otpMobileCtrl.text.isEmpty && auth.user?.phone != null && auth.user!.phone!.isNotEmpty) {
+      _otpMobileCtrl.text = auth.user!.phone!.replaceAll('+91', '').replaceAll(' ', '');
+    }
+
+    return DossierCard(
+      variant: DossierCardVariant.glass,
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF06B6D4), Color(0xFF6366F1)],
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'STEP 1 OF 2 : PHONE VERIFICATION',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const DossierBadge(
+                          label: 'TWILIO OTP',
+                          variant: DossierBadgeVariant.info,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Verify Your Mobile Number',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.logout_rounded, size: 20),
+                tooltip: 'Sign Out / Switch Account',
+                onPressed: () {
+                  ref.read(authProvider.notifier).signOut();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'To prevent spam registrations and ghost accounts, every kiosk operator must verify their mobile phone number via Twilio SMS before completing workstation activation.',
+            style: TextStyle(fontSize: 13, color: isDark ? Colors.grey[400] : Colors.grey[600], height: 1.4),
+          ),
+          const SizedBox(height: 20),
+
+          // Error / Success Message
+          if (auth.errorMessage != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      auth.errorMessage!,
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (_otpFeedbackMessage != null && auth.errorMessage == null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF10B981), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _otpFeedbackMessage!,
+                      style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Phone Number Input
+          DossierInputField(
+            key: const ValueKey('otp_mobile_field'),
+            label: 'Mobile Number',
+            hintText: '9876543210',
+            controller: _otpMobileCtrl,
+            enabled: !_isOtpSent,
+            prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+            keyboardType: TextInputType.phone,
+          ),
+          const SizedBox(height: 12),
+
+          if (!_isOtpSent) ...[
+            SizedBox(
+              width: double.infinity,
+              child: DossierButton(
+                key: const ValueKey('send_otp_button'),
+                text: 'Send Verification OTP',
+                icon: Icons.sms_rounded,
+                isLoading: auth.isLoading,
+                onPressed: _handleSendOtp,
+              ),
+            ),
+          ] else ...[
+            // OTP Code Input Field
+            DossierInputField(
+              key: const ValueKey('otp_code_field'),
+              label: '6-Digit Verification Code',
+              hintText: '••••••',
+              controller: _otpCodeCtrl,
+              prefixIcon: const Icon(Icons.security_rounded, size: 18),
+              keyboardType: TextInputType.number,
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+
+            // Dev Hint
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.2)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFF6366F1)),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Twilio SMS sent. In offline/dev mode, you can also enter 123456.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF6366F1)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Verify Button
+            SizedBox(
+              width: double.infinity,
+              child: DossierButton(
+                key: const ValueKey('verify_otp_button'),
+                text: 'Verify Mobile & Continue',
+                icon: Icons.verified_user_rounded,
+                isLoading: auth.isLoading,
+                onPressed: _handleVerifyOtp,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Resend & Change Phone Actions
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _isOtpSent = false;
+                      _otpCodeCtrl.clear();
+                      _otpFeedbackMessage = null;
+                      _otpCountdownTimer?.cancel();
+                    });
+                  },
+                  icon: const Icon(Icons.edit_rounded, size: 14),
+                  label: const Text('Change Number', style: TextStyle(fontSize: 12)),
+                ),
+                TextButton(
+                  onPressed: _otpTimerSeconds > 0 || auth.isLoading ? null : _handleSendOtp,
+                  child: Text(
+                    _otpTimerSeconds > 0 ? 'Resend in ${_otpTimerSeconds}s' : 'Resend OTP SMS',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _otpTimerSeconds > 0 ? Colors.grey : const Color(0xFF6366F1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -10,6 +10,7 @@ class AuthUser {
   final String role;
   final bool hasKiosk;
   final String? kioskId;
+  final bool isMobileVerified;
   final String status; // 'active', 'suspended', 'deleted'
   final bool isSuspended;
   final DateTime? suspendedAt;
@@ -26,6 +27,7 @@ class AuthUser {
     this.role = 'admin',
     this.hasKiosk = false,
     this.kioskId,
+    this.isMobileVerified = false,
     this.status = 'active',
     this.isSuspended = false,
     this.suspendedAt,
@@ -43,6 +45,7 @@ class AuthUser {
     String? role,
     bool? hasKiosk,
     String? kioskId,
+    bool? isMobileVerified,
     String? status,
     bool? isSuspended,
     DateTime? suspendedAt,
@@ -59,6 +62,7 @@ class AuthUser {
       role: role ?? this.role,
       hasKiosk: hasKiosk ?? this.hasKiosk,
       kioskId: kioskId ?? this.kioskId,
+      isMobileVerified: isMobileVerified ?? this.isMobileVerified,
       status: status ?? this.status,
       isSuspended: isSuspended ?? this.isSuspended,
       suspendedAt: suspendedAt ?? this.suspendedAt,
@@ -83,6 +87,7 @@ class AuthUser {
       role: json['role'] as String? ?? 'admin',
       hasKiosk: json['hasKiosk'] as bool? ?? false,
       kioskId: json['kioskId'] as String?,
+      isMobileVerified: json['isMobileVerified'] as bool? ?? (json['is_mobile_verified'] == 1),
       status: json['status'] as String? ?? 'active',
       isSuspended: json['isSuspended'] as bool? ?? (json['is_suspended'] == 1),
       suspendedAt: json['suspendedAt'] != null
@@ -106,6 +111,7 @@ class AuthUser {
       'role': role,
       'hasKiosk': hasKiosk,
       'kioskId': kioskId,
+      'isMobileVerified': isMobileVerified,
       'status': status,
       'isSuspended': isSuspended,
       'suspendedAt': suspendedAt?.toIso8601String(),
