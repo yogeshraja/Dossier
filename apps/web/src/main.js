@@ -1,4 +1,6 @@
 import { DOCS_SECTIONS } from './docs-data.js';
+import { THEME_CONSTANTS, TIMING_CONSTANTS, DOM_SELECTORS } from './constants.js';
+import { WebConfig } from './config.js';
 
 // State
 let currentSectionIndex = 0;
@@ -7,23 +9,23 @@ let searchQuery = '';
 
 // Theme Management
 function initTheme() {
-  const savedTheme = localStorage.getItem('dossier-theme') || 'dark';
+  const savedTheme = localStorage.getItem(THEME_CONSTANTS.STORAGE_KEY) || THEME_CONSTANTS.THEME_DARK;
   document.documentElement.setAttribute('data-theme', savedTheme);
   updateThemeButton(savedTheme);
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
-  const next = current === 'dark' ? 'light' : 'dark';
+  const current = document.documentElement.getAttribute('data-theme') || THEME_CONSTANTS.THEME_DARK;
+  const next = current === THEME_CONSTANTS.THEME_DARK ? THEME_CONSTANTS.THEME_LIGHT : THEME_CONSTANTS.THEME_DARK;
   document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('dossier-theme', next);
+  localStorage.setItem(THEME_CONSTANTS.STORAGE_KEY, next);
   updateThemeButton(next);
 }
 
 function updateThemeButton(theme) {
-  const btn = document.getElementById('theme-toggle');
+  const btn = document.getElementById(DOM_SELECTORS.THEME_TOGGLE);
   if (btn) {
-    btn.innerHTML = theme === 'dark' ? '🌙 Dark' : '☀️ Light';
+    btn.innerHTML = theme === THEME_CONSTANTS.THEME_DARK ? THEME_CONSTANTS.DARK_LABEL : THEME_CONSTANTS.LIGHT_LABEL;
   }
 }
 
@@ -58,18 +60,18 @@ window.copyCode = function(button) {
   if (code) {
     navigator.clipboard.writeText(code.innerText).then(() => {
       button.innerText = 'Copied!';
-      button.style.color = '#10B981';
+      button.style.color = THEME_CONSTANTS.SUCCESS_COLOR;
       setTimeout(() => {
         button.innerText = 'Copy';
         button.style.color = '';
-      }, 2000);
+      }, TIMING_CONSTANTS.COPY_FEEDBACK_MS);
     });
   }
 };
 
 // Render Sidebar Navigation
 function renderSidebar() {
-  const navContainer = document.getElementById('docs-nav-groups');
+  const navContainer = document.getElementById(DOM_SELECTORS.DOCS_NAV_GROUPS);
   if (!navContainer) return;
 
   navContainer.innerHTML = '';
@@ -119,7 +121,7 @@ function renderSidebar() {
 
 // Render Active Document
 function renderActiveDoc() {
-  const viewer = document.getElementById('docs-viewer');
+  const viewer = document.getElementById(DOM_SELECTORS.DOCS_VIEWER);
   if (!viewer) return;
 
   const section = DOCS_SECTIONS[currentSectionIndex];
@@ -136,10 +138,10 @@ function renderActiveDoc() {
       <div class="api-tester">
         <div class="api-tester-header">
           <span class="api-badge">POST /api/v1/auth/activate</span>
-          <button class="api-run-btn" id="simulate-activate-btn">Test Live Endpoint</button>
+          <button class="api-run-btn" id="${DOM_SELECTORS.SIMULATE_ACTIVATE_BTN}">Test Live Endpoint</button>
         </div>
-        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">Simulate Cloudflare D1 software activation response:</p>
-        <div class="api-response-box" id="api-output">// Click "Test Live Endpoint" to dispatch request...</div>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">Endpoint target: ${WebConfig.apiBaseUrl}</p>
+        <div class="api-response-box" id="${DOM_SELECTORS.API_OUTPUT}">// Click "Test Live Endpoint" to dispatch request...</div>
       </div>
     `;
   }
@@ -147,17 +149,17 @@ function renderActiveDoc() {
   viewer.innerHTML = htmlContent;
 
   // Bind interactive tester if present
-  const simBtn = document.getElementById('simulate-activate-btn');
+  const simBtn = document.getElementById(DOM_SELECTORS.SIMULATE_ACTIVATE_BTN);
   if (simBtn) {
     simBtn.addEventListener('click', simulateActivationApi);
   }
 }
 
 function simulateActivationApi() {
-  const out = document.getElementById('api-output');
+  const out = document.getElementById(DOM_SELECTORS.API_OUTPUT);
   if (!out) return;
 
-  out.innerText = "Dispatching POST /api/v1/auth/activate to Cloudflare Worker edge...\n";
+  out.innerText = `Dispatching POST /api/v1/auth/activate to ${WebConfig.apiBaseUrl}...\n`;
   setTimeout(() => {
     const mockResponse = {
       success: true,
@@ -176,12 +178,12 @@ function simulateActivationApi() {
       serverTime: new Date().toISOString()
     };
     out.innerText = `// HTTP 200 OK (Cloudflare D1 Edge)\n` + JSON.stringify(mockResponse, null, 2);
-  }, 400);
+  }, TIMING_CONSTANTS.API_SIMULATION_DELAY_MS);
 }
 
 // Search Filter Input
 function setupSearch() {
-  const searchInput = document.getElementById('docs-search');
+  const searchInput = document.getElementById(DOM_SELECTORS.DOCS_SEARCH);
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       searchQuery = e.target.value;
@@ -194,7 +196,7 @@ function setupSearch() {
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   
-  const themeBtn = document.getElementById('theme-toggle');
+  const themeBtn = document.getElementById(DOM_SELECTORS.THEME_TOGGLE);
   if (themeBtn) {
     themeBtn.addEventListener('click', toggleTheme);
   }

@@ -1,3 +1,4 @@
+import 'package:dossier/core/constants/app_constants.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dossier/data/remote/auth/server_auth_api_service.dart';
 import 'package:dossier/features/auth/domain/models/auth_user.dart';
@@ -40,7 +41,7 @@ class AuthState {
     this.serverAuthToken,
     this.isServerConnected = true,
     this.isOfflineMode = false,
-    this.serverUrl = 'https://dossier-api.rajayogesh49.workers.dev',
+    this.serverUrl = AppConfig.defaultApiBaseUrl,
   });
 
   bool get hasRegisteredOperators => registeredOperators.isNotEmpty;

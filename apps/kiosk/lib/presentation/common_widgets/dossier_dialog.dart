@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dossier/core/constants/app_constants.dart';
 
 class DossierDialog extends StatelessWidget {
   final String title;
@@ -20,7 +21,7 @@ class DossierDialog extends StatelessWidget {
     required this.content,
     this.actions,
     this.maxWidth = 540,
-    this.padding = const EdgeInsets.all(24),
+    this.padding = AppDimensions.paddingLG,
     this.showCloseButton = true,
   });
 
@@ -34,7 +35,7 @@ class DossierDialog extends StatelessWidget {
       barrierDismissible: barrierDismissible,
       barrierLabel: 'Dismiss',
       barrierColor: Colors.black.withValues(alpha: 0.65),
-      transitionDuration: const Duration(milliseconds: 220),
+      transitionDuration: AppDurations.standard,
       pageBuilder: (ctx, anim1, anim2) => builder(ctx),
       transitionBuilder: (ctx, anim1, anim2, child) {
         final curvedValue = Curves.easeOutBack.transform(anim1.value);

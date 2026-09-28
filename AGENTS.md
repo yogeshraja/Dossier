@@ -82,6 +82,15 @@
   - **Mobile (< 640dp):** Single-column stepper workflows with bottom navigation bar.
 - **Mandatory Layout Rule:** When building button bars, action chips, metric rows, or date selectors, never use unbounded `Row`s that can clip on narrow screens. Always wrap with `Wrap(spacing: ..., runSpacing: ...)` or `LayoutBuilder` / `SingleChildScrollView` to ensure **0 RenderFlex overflows**.
 
+### 2.9 Zero Magic Values Mandate & Centralized Configuration (Steering Rule)
+- **STRICT MANDATE:** You must NEVER use raw magic numbers, magic strings, arbitrary dimensions, unparameterized URLs, hardcoded timeouts, or unexplained literals directly in business logic, UI widgets, controllers, DAOs, or API routes.
+- **Centralized Constants & Configs:**
+  - **Flutter Kiosk (`apps/kiosk/`):** All dimensions, durations, breakpoints, strings, currency symbols, and defaults must reside under `lib/core/constants/` and `lib/core/config/app_config.dart`.
+  - **Cloudflare Edge API (`services/api/`):** All status codes, token lifetimes, encryption parameters, regexes, and endpoint bases must reside in `src/constants.ts` and `src/config.ts`.
+  - **Web Portal (`apps/web/`):** All timing, theme storage keys, and documentation metadata must reside in `src/constants.js` and `src/config.js`.
+- **Environment Variable Overrides:**
+  - Every application configuration (API base URLs, timeouts, OTP lengths, tax rates, retry limits, server ports, secrets) must support runtime/compile-time environment variable overrides via `String.fromEnvironment`, `int.fromEnvironment`, `bool.fromEnvironment`, `--dart-define`, `.env`, and Cloudflare Worker `env` bindings.
+
 ---
 
 ## 3. Testing & Verification Standard

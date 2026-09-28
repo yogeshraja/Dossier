@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dossier/core/constants/app_constants.dart';
 
 /// Configuration for a single resizable pane within a [DossierResizableSplitView].
 class ResizablePane {
@@ -28,7 +29,7 @@ class ResizablePane {
   const ResizablePane({
     required this.child,
     this.initialSize,
-    this.minSize = 140.0,
+    this.minSize = AppDimensions.panelMinWidth,
     this.maxSize = double.infinity,
     this.isFlexible = false,
     this.isCollapsed = false,

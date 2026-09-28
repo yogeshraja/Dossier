@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:dossier/core/constants/app_constants.dart';
 
 enum DossierCardVariant {
   elevated,
@@ -43,9 +44,9 @@ class DossierCard extends StatefulWidget {
     this.onTap,
     this.onLongPress,
     this.variant = DossierCardVariant.outlined,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = AppDimensions.paddingMD,
     this.margin = EdgeInsets.zero,
-    this.borderRadius = 14,
+    this.borderRadius = AppDimensions.radiusLG,
     this.backgroundColor,
     this.borderColor,
     this.gradient,

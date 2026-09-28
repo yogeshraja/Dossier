@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dossier/core/constants/app_constants.dart';
 
 class DossierPanel extends StatefulWidget {
   final String title;
@@ -27,11 +28,11 @@ class DossierPanel extends StatefulWidget {
     this.isCollapsible = false,
     this.initiallyExpanded = true,
     this.onExpansionChanged,
-    this.contentPadding = const EdgeInsets.all(16),
-    this.headerPadding = const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    this.contentPadding = AppDimensions.paddingMD,
+    this.headerPadding = const EdgeInsets.symmetric(horizontal: AppDimensions.space16, vertical: AppDimensions.space12),
     this.backgroundColor,
     this.headerColor,
-    this.borderRadius = 14,
+    this.borderRadius = AppDimensions.radiusLG,
   });
 
   @override
@@ -49,7 +50,7 @@ class _DossierPanelState extends State<DossierPanel> with SingleTickerProviderSt
     super.initState();
     _isExpanded = widget.initiallyExpanded;
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 250),
+      duration: AppDurations.standard,
       vsync: this,
       value: _isExpanded ? 1.0 : 0.0,
     );

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
+import 'package:dossier/core/constants/app_constants.dart';
 import 'package:dossier/features/auth/domain/models/auth_user.dart';
 import 'package:dossier/features/auth/domain/strategies/auth_strategy.dart';
 import 'package:dossier/features/auth/models/operator_model.dart';
@@ -65,9 +66,10 @@ class ServerAuthApiService {
   final http.Client _client;
 
   ServerAuthApiService({
-    this.baseUrl = 'https://dossier-api.rajayogesh49.workers.dev',
+    String? baseUrl,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+  })  : baseUrl = baseUrl ?? AppConfig.defaultApiBaseUrl,
+        _client = client ?? http.Client();
 
   /// Check server health
   Future<bool> checkServerHealth() async {

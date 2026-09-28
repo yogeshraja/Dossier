@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:dossier/core/constants/app_constants.dart';
 
 class DossierInputField extends StatefulWidget {
   final TextEditingController? controller;
@@ -50,7 +51,7 @@ class DossierInputField extends StatefulWidget {
     this.minLines,
     this.autofocus = false,
     this.isSearch = false,
-    this.borderRadius = 12,
+    this.borderRadius = AppDimensions.radiusMD,
     this.contentPadding,
     this.focusNode,
   });
