@@ -40,7 +40,7 @@ class AuthState {
     this.serverAuthToken,
     this.isServerConnected = true,
     this.isOfflineMode = false,
-    this.serverUrl = 'https://api.dossier.app',
+    this.serverUrl = 'https://dossier-api.rajayogesh49.workers.dev',
   });
 
   bool get hasRegisteredOperators => registeredOperators.isNotEmpty;

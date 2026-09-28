@@ -65,7 +65,7 @@ class ServerAuthApiService {
   final http.Client _client;
 
   ServerAuthApiService({
-    this.baseUrl = 'https://api.dossier.app',
+    this.baseUrl = 'https://dossier-api.rajayogesh49.workers.dev',
     http.Client? client,
   }) : _client = client ?? http.Client();
 
