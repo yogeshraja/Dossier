@@ -53,8 +53,31 @@ class AppDatabase extends _$AppDatabase {
         .getSingleOrNull();
   }
 
-  Future<int> insertDossier(DossiersCompanion entry) => into(dossiers).insert(entry);
-  Future<bool> updateDossier(DossiersCompanion entry) => update(dossiers).replace(entry);
+  Future<int> insertDossier(DossiersCompanion entry) async {
+    final res = await into(dossiers).insert(entry);
+    await enqueueSyncItem(
+      SyncQueueCompanion.insert(
+        entityType: 'DOSSIER',
+        entityId: entry.id.value,
+        operation: 'CREATE',
+        payloadJson: '{}',
+      ),
+    );
+    return res;
+  }
+
+  Future<bool> updateDossier(DossiersCompanion entry) async {
+    final res = await update(dossiers).replace(entry);
+    await enqueueSyncItem(
+      SyncQueueCompanion.insert(
+        entityType: 'DOSSIER',
+        entityId: entry.id.value,
+        operation: 'UPDATE',
+        payloadJson: '{}',
+      ),
+    );
+    return res;
+  }
 
   // 2. Services Master Operations
   Stream<List<Service>> watchActiveServices() {
@@ -87,14 +110,35 @@ class AppDatabase extends _$AppDatabase {
         .watch();
   }
 
-  Future<int> insertCase(CasesCompanion entry) => into(cases).insert(entry);
-  Future<int> updateCaseStage(String caseId, String stage) {
-    return (update(cases)..where((tbl) => tbl.id.equals(caseId))).write(
+  Future<int> insertCase(CasesCompanion entry) async {
+    final res = await into(cases).insert(entry);
+    await enqueueSyncItem(
+      SyncQueueCompanion.insert(
+        entityType: 'CASE',
+        entityId: entry.id.value,
+        operation: 'CREATE',
+        payloadJson: '{}',
+      ),
+    );
+    return res;
+  }
+
+  Future<int> updateCaseStage(String caseId, String stage) async {
+    final res = await (update(cases)..where((tbl) => tbl.id.equals(caseId))).write(
       CasesCompanion(
         stage: Value(stage),
         updatedAt: Value(DateTime.now()),
       ),
     );
+    await enqueueSyncItem(
+      SyncQueueCompanion.insert(
+        entityType: 'CASE',
+        entityId: caseId,
+        operation: 'UPDATE',
+        payloadJson: '{}',
+      ),
+    );
+    return res;
   }
 
   Future<int> updateCasePayment(String caseId, double advancePaid) {
@@ -120,13 +164,100 @@ class AppDatabase extends _$AppDatabase {
     return (select(exhibits)..where((tbl) => tbl.caseId.equals(caseId))).watch();
   }
 
-  Future<int> insertExhibit(ExhibitsCompanion entry) => into(exhibits).insert(entry);
-  Future<int> deleteExhibit(String exhibitId) =>
-      (delete(exhibits)..where((tbl) => tbl.id.equals(exhibitId))).go();
-  Future<int> deleteCase(String caseId) =>
-      (delete(cases)..where((tbl) => tbl.id.equals(caseId))).go();
-  Future<int> deleteDossier(String dossierId) =>
-      (delete(dossiers)..where((tbl) => tbl.id.equals(dossierId))).go();
+  Future<int> insertExhibit(ExhibitsCompanion entry) async {
+    final res = await into(exhibits).insert(entry);
+    await enqueueSyncItem(
+      SyncQueueCompanion.insert(
+        entityType: 'EXHIBIT',
+        entityId: entry.id.value,
+        operation: 'CREATE',
+        payloadJson: '{}',
+      ),
+    );
+    return res;
+  }
+
+  Future<int> deleteExhibit(String exhibitId) async {
+    final res = await (delete(exhibits)..where((tbl) => tbl.id.equals(exhibitId))).go();
+    await enqueueSyncItem(
+      SyncQueueCompanion.insert(
+        entityType: 'EXHIBIT',
+        entityId: exhibitId,
+        operation: 'DELETE',
+        payloadJson: '{}',
+      ),
+    );
+    return res;
+  }
+
+  Future<int> deleteCase(String caseId) async {
+    final res = await (delete(cases)..where((tbl) => tbl.id.equals(caseId))).go();
+    await enqueueSyncItem(
+      SyncQueueCompanion.insert(
+        entityType: 'CASE',
+        entityId: caseId,
+        operation: 'DELETE',
+        payloadJson: '{}',
+      ),
+    );
+    return res;
+  }
+
+  Future<int> deleteDossier(String dossierId) async {
+    final res = await (delete(dossiers)..where((tbl) => tbl.id.equals(dossierId))).go();
+    await enqueueSyncItem(
+      SyncQueueCompanion.insert(
+        entityType: 'DOSSIER',
+        entityId: dossierId,
+        operation: 'DELETE',
+        payloadJson: '{}',
+      ),
+    );
+    return res;
+  }
+
+  Future<int> enqueueAllUnsynced() async {
+    int count = 0;
+    final unsyncedDossiers = await (select(dossiers)..where((tbl) => tbl.remoteFolderId.isNull())).get();
+    for (final d in unsyncedDossiers) {
+      await enqueueSyncItem(
+        SyncQueueCompanion.insert(
+          entityType: 'DOSSIER',
+          entityId: d.id,
+          operation: 'CREATE',
+          payloadJson: '{}',
+        ),
+      );
+      count++;
+    }
+
+    final unsyncedCases = await (select(cases)..where((tbl) => tbl.remoteFolderId.isNull())).get();
+    for (final c in unsyncedCases) {
+      await enqueueSyncItem(
+        SyncQueueCompanion.insert(
+          entityType: 'CASE',
+          entityId: c.id,
+          operation: 'CREATE',
+          payloadJson: '{}',
+        ),
+      );
+      count++;
+    }
+
+    final unsyncedExhibits = await (select(exhibits)..where((tbl) => tbl.remoteFileId.isNull())).get();
+    for (final e in unsyncedExhibits) {
+      await enqueueSyncItem(
+        SyncQueueCompanion.insert(
+          entityType: 'EXHIBIT',
+          entityId: e.id,
+          operation: 'CREATE',
+          payloadJson: '{}',
+        ),
+      );
+      count++;
+    }
+    return count;
+  }
 
   Future<int> updateExhibitRemoteId(String exhibitId, String remoteFileId) {
     return (update(exhibits)..where((tbl) => tbl.id.equals(exhibitId))).write(

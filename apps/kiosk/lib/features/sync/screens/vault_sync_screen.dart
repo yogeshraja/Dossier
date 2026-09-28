@@ -24,7 +24,7 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
     Future.microtask(() {
       final syncState = ref.read(syncProvider);
       if (!syncState.isConnected) {
-        ref.read(syncProvider.notifier).connectGoogleDrive(forceMock: true);
+        ref.read(syncProvider.notifier).connectGoogleDrive();
       }
     });
   }

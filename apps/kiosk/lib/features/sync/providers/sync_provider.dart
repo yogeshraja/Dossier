@@ -151,6 +151,19 @@ class SyncNotifier extends StateNotifier<SyncState> {
     return _gdrive;
   }
 
+  Future<void> scanAndQueueUnsynced() async {
+    final db = _ref.read(databaseProvider);
+    final count = await db.enqueueAllUnsynced();
+    if (count > 0) {
+      state = state.copyWith(
+        logs: [
+          '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} - Queued $count pending local items for cloud sync',
+          ...state.logs,
+        ],
+      );
+    }
+  }
+
   Future<void> triggerSync() async {
     if (state.isSyncing) return;
 
@@ -165,13 +178,14 @@ class SyncNotifier extends StateNotifier<SyncState> {
     }
 
     if (state.activeTier == StorageTierType.byoGoogleDrive && !state.isConnected) {
-      final connected = await connectGoogleDrive(forceMock: true);
+      final connected = await connectGoogleDrive();
       if (!connected) return;
     }
 
     state = state.copyWith(isSyncing: true, progress: 0.0, currentTask: 'Scanning pending sync outbox...');
 
     final db = _ref.read(databaseProvider);
+    await db.enqueueAllUnsynced();
     final pendingItems = await db.getPendingSyncItems();
     final vaultService = _getActiveStorageService();
 
@@ -182,7 +196,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
         currentTask: null,
         lastSyncedAt: DateTime.now(),
         logs: [
-          '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} - Outbox is clean (0 items to sync)',
+          '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')} - Cloud Vault is up to date (0 pending items)',
           ...state.logs,
         ],
       );
