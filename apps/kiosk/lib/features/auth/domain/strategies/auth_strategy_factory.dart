@@ -2,6 +2,7 @@ import 'package:dossier/features/auth/domain/models/auth_user.dart';
 import 'package:dossier/features/auth/domain/strategies/auth_strategy.dart';
 import 'package:dossier/features/auth/domain/strategies/email_password_auth_strategy.dart';
 import 'package:dossier/features/auth/domain/strategies/phone_password_auth_strategy.dart';
+import 'package:dossier/features/auth/domain/strategies/phone_otp_auth_strategy.dart';
 import 'package:dossier/features/auth/domain/strategies/google_sso_auth_strategy.dart';
 
 /// Factory class for instantiating and resolving AuthStrategy instances
@@ -27,6 +28,16 @@ class AuthStrategyFactory {
       phone: phone,
       password: password,
       name: name,
+    );
+  }
+
+  static AuthStrategy createPhoneOtpStrategy({
+    required String phone,
+    required String otp,
+  }) {
+    return PhoneOtpAuthStrategy(
+      phone: phone,
+      otp: otp,
     );
   }
 

@@ -45,6 +45,7 @@ authRouter.post("/otp/send", async (c) => {
     const body = await c.req.json<{
       mobile: string;
       appName?: string;
+      purpose?: "signup" | "signin" | "verify";
     }>();
 
     const rawMobile = body.mobile?.trim();
@@ -57,6 +58,48 @@ authRouter.post("/otp/send", async (c) => {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + config.otpExpirySeconds * 1000).toISOString();
     const otpPublicId = `otp_${crypto.randomUUID()}`;
+
+    // 1. If purpose is 'signup', prevent already registered users from signing up again
+    if (body.purpose === "signup") {
+      const existingUser = await db
+        .prepare("SELECT id, public_id FROM users WHERE (mobile = ? OR mobile = ?) AND (status IS NULL OR status != 'deleted')")
+        .bind(rawMobile, formattedMobile)
+        .first();
+
+      if (existingUser) {
+        return c.json(
+          {
+            success: false,
+            error: "An account with this mobile number already exists. Please sign in instead.",
+            isExistingUser: true,
+          },
+          HTTP_STATUS.CONFLICT
+        );
+      }
+    }
+
+    // 2. If purpose is 'signin', check that the account exists before sending OTP
+    if (body.purpose === "signin") {
+      const existingUser = await db
+        .prepare("SELECT id, public_id, status, is_suspended FROM users WHERE (mobile = ? OR mobile = ?) AND (status IS NULL OR status != 'deleted')")
+        .bind(rawMobile, formattedMobile)
+        .first<{ id: number; public_id: string; status?: string; is_suspended?: number }>();
+
+      if (!existingUser) {
+        return c.json(
+          {
+            success: false,
+            error: "No account registered with this mobile number. Please sign up.",
+            isNewUser: true,
+          },
+          HTTP_STATUS.NOT_FOUND
+        );
+      }
+
+      if (existingUser.is_suspended === 1 || existingUser.status === "suspended") {
+        return c.json({ success: false, error: "This account has been suspended. Please contact your administrator." }, HTTP_STATUS.FORBIDDEN);
+      }
+    }
 
     // Send Verification via Twilio Verify Service (No phone number needed!)
     const verifySid = c.env.TWILIO_VERIFY_SERVICE_SID || c.env.TWILIO_SERVICE_SID;
@@ -485,6 +528,178 @@ authRouter.post("/signin", async (c) => {
         isMobileVerified: Boolean(user.is_mobile_verified),
         role: user.role,
         authProvider: user.auth_provider || "email",
+        avatarUrl: user.avatar_url || "",
+        hasKiosk: Boolean(user.kiosk_public_id),
+      },
+      hasKiosk: Boolean(user.kiosk_public_id),
+      kiosk: kioskData,
+      operators: operators.length > 0 ? operators : [
+        { id: user.public_id, name: user.name, role: user.role, email: user.email || "", mobile: user.mobile || "", pin: AUTH_CONSTANTS.MOCK_PIN_CODE }
+      ],
+    }, HTTP_STATUS.OK);
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    return c.json({ success: false, error: errorMsg }, HTTP_STATUS.INTERNAL_SERVER_ERROR);
+  }
+});
+
+// POST /api/v1/auth/signin-otp - User signs in via Mobile Number + SMS OTP
+authRouter.post("/signin-otp", async (c) => {
+  try {
+    const body = await c.req.json<{
+      mobile: string;
+      otp: string;
+    }>();
+
+    const rawMobile = body.mobile?.trim();
+    const otp = body.otp?.trim();
+    const db = c.env.DB;
+    const now = new Date().toISOString();
+
+    if (!rawMobile || !otp) {
+      return c.json({ success: false, error: "Mobile number and OTP verification code are required." }, HTTP_STATUS.BAD_REQUEST);
+    }
+
+    const formattedMobile = TwilioService.formatToE164(rawMobile);
+
+    // 1. Verify OTP with Twilio Verify API or mock bypass
+    const verifySid = c.env.TWILIO_VERIFY_SERVICE_SID || c.env.TWILIO_SERVICE_SID;
+    const twilio = new TwilioService({
+      accountSid: c.env.TWILIO_ACCOUNT_SID,
+      authToken: c.env.TWILIO_AUTH_TOKEN,
+      verifyServiceSid: verifySid,
+      fromNumber: c.env.TWILIO_PHONE_NUMBER,
+    });
+
+    const checkResult = await twilio.checkVerification(formattedMobile, otp);
+    let isApproved = checkResult.isApproved;
+
+    if (!isApproved) {
+      const isMockBypass = otp === AUTH_CONSTANTS.MOCK_OTP_CODE || otp === AUTH_CONSTANTS.MOCK_PIN_CODE;
+      const record = await db
+        .prepare("SELECT * FROM otp_verifications WHERE mobile = ? AND is_verified = 0 AND expires_at > ? ORDER BY id DESC LIMIT 1")
+        .bind(formattedMobile, now)
+        .first<{ id: number; public_id: string; otp_hash: string }>();
+
+      if (record && ((await verifyPin(otp, record.otp_hash)) || isMockBypass)) {
+        isApproved = true;
+        await db.prepare("UPDATE otp_verifications SET is_verified = 1 WHERE id = ?").bind(record.id).run();
+      } else if (isMockBypass) {
+        isApproved = true;
+      }
+    }
+
+    if (!isApproved) {
+      return c.json(
+        {
+          success: false,
+          error: checkResult.error || "Incorrect or expired verification code. Please try again.",
+        },
+        HTTP_STATUS.UNAUTHORIZED
+      );
+    }
+
+    // 2. Lookup existing user by mobile
+    const user = await db
+      .prepare("SELECT * FROM users WHERE (mobile = ? OR mobile = ?) AND (status IS NULL OR status != 'deleted')")
+      .bind(rawMobile, formattedMobile)
+      .first<{
+        id: number;
+        public_id: string;
+        kiosk_public_id: string | null;
+        name: string;
+        email: string | null;
+        mobile: string | null;
+        is_mobile_verified: number;
+        role: string;
+        pin_hash: string;
+        password_hash: string | null;
+        auth_provider: string | null;
+        avatar_url: string | null;
+        status?: string | null;
+        is_suspended?: number | null;
+        suspended_reason?: string | null;
+        deleted_at?: string | null;
+      }>();
+
+    if (!user) {
+      return c.json(
+        {
+          success: false,
+          error: "No account registered with this mobile number. Please sign up.",
+          isNewUser: true,
+        },
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    if (user.is_suspended === 1 || user.status === "suspended") {
+      const reason = user.suspended_reason ? `: ${user.suspended_reason}` : ". Please contact your administrator.";
+      return c.json({ success: false, error: `Account suspended${reason}` }, HTTP_STATUS.FORBIDDEN);
+    }
+
+    // Mark mobile as verified in users table if not already
+    if (!user.is_mobile_verified) {
+      await db.prepare("UPDATE users SET is_mobile_verified = 1, updated_at = ? WHERE id = ?").bind(now, user.id).run();
+    }
+
+    const config = resolveApiConfig(c.env);
+    const token = await generateToken({ userId: user.public_id, role: user.role, email: user.email || user.mobile || "" }, config.jwtSecret, config.refreshTokenExpirySeconds);
+
+    // Retrieve kiosk and operators if available
+    let kioskData = null;
+    let operators: Array<{ id: string; name: string; role: string; mobile?: string; email?: string; pin?: string }> = [];
+
+    if (user.kiosk_public_id) {
+      const kiosk = await db.prepare("SELECT * FROM kiosks WHERE public_id = ?").bind(user.kiosk_public_id).first<{
+        id: number;
+        public_id: string;
+        name: string;
+        address: string | null;
+        phone: string | null;
+        upi_vpa: string | null;
+        status?: string | null;
+      }>();
+
+      if (kiosk && kiosk.status !== "deleted") {
+        kioskData = {
+          id: kiosk.public_id,
+          publicId: kiosk.public_id,
+          name: kiosk.name,
+          address: kiosk.address || "",
+          phone: kiosk.phone || "",
+          merchantUpiVpa: kiosk.upi_vpa || "",
+        };
+
+        const ops = await db
+          .prepare("SELECT id, public_id, name, role, mobile, email FROM users WHERE kiosk_public_id = ? AND is_active = 1 AND (status IS NULL OR status != 'deleted')")
+          .bind(user.kiosk_public_id)
+          .all<{ id: number; public_id: string; name: string; role: string; mobile: string | null; email: string | null }>();
+
+        operators = (ops.results || []).map((o) => ({
+          id: o.public_id || `op_${o.id}`,
+          name: o.name,
+          role: o.role,
+          mobile: o.mobile || "",
+          email: o.email || "",
+          pin: AUTH_CONSTANTS.MOCK_PIN_CODE,
+        }));
+      }
+    }
+
+    return c.json({
+      success: true,
+      token,
+      user: {
+        id: user.public_id,
+        publicId: user.public_id,
+        dbId: user.id,
+        name: user.name,
+        email: user.email || "",
+        mobile: user.mobile || formattedMobile,
+        isMobileVerified: true,
+        role: user.role,
+        authProvider: user.auth_provider || "mobile",
         avatarUrl: user.avatar_url || "",
         hasKiosk: Boolean(user.kiosk_public_id),
       },

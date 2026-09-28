@@ -81,7 +81,7 @@ class KioskStatusBar extends ConsumerWidget {
                   Text('Engine: ${syncState.activeTier.label}', style: const TextStyle(fontSize: 12)),
                   if (syncState.userEmail != null)
                     Text('Account: ${syncState.userEmail}', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
-                  Text('Pending Outbox Queue: ${pendingSync.length} items',
+                  Text('Pending Changes to Sync: ${pendingSync.length} items',
                       style: TextStyle(
                         fontSize: 11,
                         color: pendingSync.isEmpty ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
@@ -92,7 +92,7 @@ class KioskStatusBar extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
 
-            // Hardware ESC/POS Section
+            // Hardware Thermal Printer Section
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -109,7 +109,7 @@ class KioskStatusBar extends ConsumerWidget {
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
-                          'ESC/POS Thermal Printer',
+                          'Thermal Receipt Printer',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -122,7 +122,7 @@ class KioskStatusBar extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
-                          'DRIVER READY',
+                          'PRINTER READY',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -133,7 +133,7 @@ class KioskStatusBar extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text('Protocol: ESC/POS Direct Byte Buffer (58mm / 80mm)', style: TextStyle(fontSize: 12)),
+                  const Text('Paper Format: Standard Thermal (58mm / 80mm)', style: TextStyle(fontSize: 12)),
                   Text('Store Header: ${settings.kioskName}', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
                   Text('UPI Merchant: ${settings.merchantUpiVpa.isNotEmpty ? settings.merchantUpiVpa : 'Not configured'}',
                       style: TextStyle(fontSize: 11, color: Colors.grey[400])),

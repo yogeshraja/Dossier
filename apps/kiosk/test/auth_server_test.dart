@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:dossier/data/remote/auth/server_auth_api_service.dart';
+import 'package:dossier/core/models/country_code.dart';
 import 'package:dossier/features/auth/domain/models/auth_user.dart';
 import 'package:dossier/features/auth/domain/strategies/auth_strategy_factory.dart';
 import 'package:dossier/features/auth/domain/strategies/email_password_auth_strategy.dart';
@@ -13,6 +14,7 @@ import 'package:dossier/features/auth/domain/strategies/google_sso_auth_strategy
 import 'package:dossier/features/auth/models/operator_model.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
 import 'package:dossier/features/auth/screens/auth_screen.dart';
+import 'package:dossier/presentation/common_widgets/dossier_country_picker.dart';
 
 void main() {
   group('Auth Strategy Inheritance & Multi-Step Activation Tests', () {
@@ -93,7 +95,7 @@ void main() {
 
       final result = await phoneStrategy.authenticate(baseUrl: 'https://api.dossier.app', isSignUp: true);
       expect(result.isSuccess, isTrue);
-      expect(result.user?.phone, '9876543210');
+      expect(result.user?.phone, '+919876543210');
       expect(result.user?.provider, AuthProviderType.mobile);
     });
 
@@ -273,7 +275,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Step C: Verified Badge and remaining fields (Name, Email, Password) open
-      expect(find.text('Verified Mobile: +91 9876543210'), findsOneWidget);
+      expect(find.text('Verified Mobile: +919876543210'), findsOneWidget);
       final nameField = find.byKey(const ValueKey('auth_signup_name_field'));
       final emailField = find.byKey(const ValueKey('auth_email_field'));
       final passwordField = find.byKey(const ValueKey('auth_password_field'));
@@ -721,7 +723,7 @@ void main() {
 
       // Verify Mobile Verification card elements exist
       expect(find.text('Verify Your Mobile Number'), findsOneWidget);
-      expect(find.text('TWILIO OTP'), findsOneWidget);
+      expect(find.text('SMS VERIFICATION'), findsOneWidget);
       expect(find.byKey(const ValueKey('otp_mobile_field')), findsOneWidget);
       expect(find.byKey(const ValueKey('send_otp_button')), findsOneWidget);
 
@@ -735,6 +737,271 @@ void main() {
       expect(find.byKey(const ValueKey('otp_code_field')), findsOneWidget);
       expect(find.byKey(const ValueKey('verify_otp_button')), findsOneWidget);
     });
+
+    test('14. PhoneOtpAuthStrategy authenticates mobile + OTP code', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/signin-otp') {
+          final reqBody = jsonDecode(request.body) as Map<String, dynamic>;
+          if (reqBody['otp'] == '123456') {
+            return http.Response(
+              jsonEncode({
+                'success': true,
+                'token': 'jwt-otp-token',
+                'user': {
+                  'id': 'usr-otp-login',
+                  'name': 'OTP User',
+                  'mobile': reqBody['mobile'],
+                  'role': 'admin',
+                  'authProvider': 'mobile',
+                  'hasKiosk': true,
+                },
+                'hasKiosk': true,
+                'operators': [
+                  {
+                    'id': 'op-otp-login',
+                    'name': 'OTP User',
+                    'role': 'admin',
+                    'mobile': reqBody['mobile'],
+                    'pin': '1234',
+                  }
+                ],
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          } else {
+            return http.Response(
+              jsonEncode({'success': false, 'error': 'Incorrect verification code.'}),
+              401,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final strategy = AuthStrategyFactory.createPhoneOtpStrategy(
+        phone: '9876543210',
+        otp: '123456',
+      );
+
+      final result = await strategy.authenticate(
+        baseUrl: 'https://api.dossier.app',
+        isSignUp: false,
+        client: mockClient,
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.user?.phone, '+919876543210');
+      expect(result.hasKiosk, isTrue);
+      expect(result.operators.length, 1);
+    });
+
+    testWidgets('15. AuthScreen supports switching between Password and SMS OTP Sign-In', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Default: Identifier & Password fields are present
+      final idField = find.byKey(const ValueKey('auth_identifier_field'));
+      final pwdField = find.byKey(const ValueKey('auth_password_field'));
+      final signInBtn = find.byKey(const ValueKey('auth_signin_button'));
+      final switchToOtpBtn = find.byKey(const ValueKey('switch_to_otp_signin_button'));
+
+      expect(idField, findsOneWidget);
+      expect(pwdField, findsOneWidget);
+      expect(signInBtn, findsOneWidget);
+      expect(switchToOtpBtn, findsOneWidget);
+
+      // Enter mobile number in unified identifier field
+      await tester.enterText(idField, '9876543210');
+      await tester.pump();
+
+      // Switch to SMS OTP mode
+      await tester.tap(switchToOtpBtn);
+      await tester.pumpAndSettle();
+
+      // Password field disappears, Send Sign-In OTP button appears
+      expect(find.byKey(const ValueKey('auth_password_field')), findsNothing);
+      final sendSignInOtpBtn = find.byKey(const ValueKey('signin_send_otp_button'));
+      expect(sendSignInOtpBtn, findsOneWidget);
+
+      // Tap Send Sign-In OTP
+      await tester.tap(sendSignInOtpBtn);
+      await tester.pumpAndSettle();
+
+      // 6-digit OTP code field and Verify & Sign In button appear
+      final signinOtpField = find.byKey(const ValueKey('signin_otp_field'));
+      final verifySignInBtn = find.byKey(const ValueKey('signin_verify_otp_button'));
+      expect(signinOtpField, findsOneWidget);
+      expect(verifySignInBtn, findsOneWidget);
+    });
+
+    testWidgets('16. Sign-Up duplicate user rejection shows error and Switch to Sign In CTA', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/otp/send') {
+          return http.Response(
+            jsonEncode({
+              'success': false,
+              'error': 'An account with this mobile number already exists. Please sign in instead.',
+              'isExistingUser': true,
+            }),
+            409,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            serverAuthApiServiceProvider.overrideWithValue(
+              ServerAuthApiService(client: mockClient),
+            ),
+          ],
+          child: const MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Switch to Sign Up
+      await tester.tap(find.text('Sign Up'));
+      await tester.pumpAndSettle();
+
+      // Enter existing mobile number and send OTP
+      final mobileField = find.byKey(const ValueKey('auth_mobile_field'));
+      await tester.enterText(mobileField, '9876543210');
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('signup_send_otp_button')));
+      await tester.pumpAndSettle();
+
+      // Error banner with 'Switch to Sign In →' button is shown
+      expect(find.text('An account with this mobile number already exists. Please sign in instead.'), findsOneWidget);
+      final switchCta = find.text('Switch to Sign In →');
+      expect(switchCta, findsOneWidget);
+
+      // Tap CTA to switch to Sign In
+      await tester.tap(switchCta);
+      await tester.pumpAndSettle();
+
+      // Should now be on Sign In mode with prefilled mobile number
+      expect(find.text('Welcome Back'), findsOneWidget);
+      final identifierField = find.byKey(const ValueKey('auth_identifier_field'));
+      expect(identifierField, findsOneWidget);
+    });
+
+    test('17. CountryCode model accurately detects, formats, and validates international numbers', () {
+      // 1. Default country is India (+91)
+      expect(CountryCode.defaultCountry.code, 'IN');
+      expect(CountryCode.defaultCountry.dialCode, '+91');
+
+      // 2. Lookup by ISO code
+      final us = CountryCode.findByCode('US');
+      expect(us.name, 'United States');
+      expect(us.dialCode, '+1');
+
+      final gb = CountryCode.findByCode('GB');
+      expect(gb.name, 'United Kingdom');
+      expect(gb.dialCode, '+44');
+
+      final ae = CountryCode.findByCode('AE');
+      expect(ae.name, 'United Arab Emirates');
+      expect(ae.dialCode, '+971');
+
+      // 3. Format full E.164 number
+      expect(us.formatFullNumber('2025550143'), '+12025550143');
+      expect(gb.formatFullNumber('7911123456'), '+447911123456');
+      expect(CountryCode.defaultCountry.formatFullNumber('9876543210'), '+919876543210');
+
+      // 4. Auto-detect from E.164 string
+      expect(CountryCode.detectFromPhoneString('+447911123456').code, 'GB');
+      expect(CountryCode.detectFromPhoneString('+12025550143').code, 'US');
+      expect(CountryCode.detectFromPhoneString('+971501234567').code, 'AE');
+      expect(CountryCode.detectFromPhoneString('+919876543210').code, 'IN');
+
+      // 5. International PhonePasswordAuthStrategy handles UK and US numbers
+      final ukStrategy = PhonePasswordAuthStrategy(
+        phone: '+447911123456',
+        password: 'Password123',
+      );
+      expect(ukStrategy.validate(), isNull);
+
+      final usStrategy = PhonePasswordAuthStrategy(
+        phone: '+12025550143',
+        password: 'Password123',
+      );
+      expect(usStrategy.validate(), isNull);
+    });
+
+    testWidgets('18. Country Code Picker dialog opens, searches, and selects international country', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      CountryCode chosenCountry = CountryCode.defaultCountry;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => DossierCountryPicker(
+                key: const ValueKey('test_country_picker'),
+                selectedCountry: chosenCountry,
+                onCountryChanged: (c) {
+                  setState(() => chosenCountry = c);
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Default country picker chip shows India (+91)
+      expect(find.text('+91'), findsOneWidget);
+
+      // Tap to open selection modal
+      await tester.tap(find.byKey(const ValueKey('test_country_picker')));
+      await tester.pumpAndSettle();
+
+      // Modal is open
+      expect(find.text('Select Country Code'), findsOneWidget);
+      expect(find.byKey(const ValueKey('country_code_search_field')), findsOneWidget);
+
+      // Search for 'United Kingdom'
+      await tester.enterText(find.byKey(const ValueKey('country_code_search_field')), 'Kingdom');
+      await tester.pumpAndSettle();
+
+      // United Kingdom is shown
+      final ukTile = find.text('United Kingdom');
+      expect(ukTile, findsOneWidget);
+
+      // Tap United Kingdom
+      await tester.tap(ukTile);
+      await tester.pumpAndSettle();
+
+      // Modal closed, chip now displays +44
+      expect(find.text('+44'), findsOneWidget);
+      expect(chosenCountry.code, 'GB');
+    });
   });
 }
+
 

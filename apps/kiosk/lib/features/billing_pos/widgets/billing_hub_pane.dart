@@ -259,7 +259,7 @@ class BillingHubPane extends ConsumerWidget {
                           size: DossierButtonSize.sm,
                           customColor: const Color(0xFF0F172A),
                           isFullWidth: true,
-                          tooltip: 'Send ESC/POS receipt stream to USB/Bluetooth thermal printer',
+                          tooltip: 'Print receipt to thermal printer',
                           onPressed: () {
                             AnimatedThermalReceiptDialog.show(
                               context,

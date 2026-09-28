@@ -8,9 +8,9 @@ import 'package:dossier/domain/services/backup_restore_service.dart';
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 
 enum StorageTierType {
-  byoGoogleDrive('BYO Google Drive (Free / User Quota)'),
-  managedR2('Managed Cloudflare R2 Cloud Vault'),
-  airGappedLocal('Local Air-Gapped Kiosk (Offline)');
+  byoGoogleDrive('Google Drive Cloud Storage'),
+  managedR2('Dossier Pro Cloud Vault'),
+  airGappedLocal('Local Workstation (Offline)');
 
   final String label;
   const StorageTierType(this.label);

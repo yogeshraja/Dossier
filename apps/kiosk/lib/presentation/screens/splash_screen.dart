@@ -77,7 +77,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
 
     // Initialize Database
     setState(() {
-      _statusMessage = 'Initializing local Drift SQLite vault...';
+      _statusMessage = 'Loading secure local workspace...';
       _progressValue = 0.35;
     });
 
@@ -91,7 +91,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
     if (!mounted) return;
 
     setState(() {
-      _statusMessage = 'Prepping media isolates & POS registers...';
+      _statusMessage = 'Setting up billing registers & media tools...';
       _progressValue = 0.75;
     });
 

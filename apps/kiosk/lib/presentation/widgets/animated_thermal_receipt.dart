@@ -150,7 +150,7 @@ class _AnimatedThermalReceiptDialogState extends State<AnimatedThermalReceiptDia
       setState(() => _isPrinting = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('ESC/POS print raw stream dispatched to thermal printer!'),
+          content: Text('Receipt sent to printer!'),
           backgroundColor: Color(0xFF10B981),
         ),
       );

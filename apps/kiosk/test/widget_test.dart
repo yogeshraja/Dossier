@@ -484,7 +484,7 @@ void main() {
 
       // Initially on Sign In
       expect(find.text('Welcome Back'), findsOneWidget);
-      expect(find.text('Email Address'), findsOneWidget);
+      expect(find.text('Email or Mobile Number'), findsOneWidget);
 
       // Switch to Sign Up (Mobile OTP first)
       await tester.tap(find.text('Sign Up'));

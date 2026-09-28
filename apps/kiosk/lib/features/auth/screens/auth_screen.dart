@@ -2,18 +2,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:dossier/core/models/country_code.dart';
 import 'package:dossier/features/auth/domain/strategies/auth_strategy_factory.dart';
 import 'package:dossier/features/auth/models/operator_model.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
 import 'package:dossier/main.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
+import 'package:dossier/presentation/common_widgets/dossier_country_picker.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 
 enum AuthMode { signIn, signUp }
-enum InputAuthMethod { email, mobile }
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -25,11 +26,22 @@ class AuthScreen extends ConsumerStatefulWidget {
 class _AuthScreenState extends ConsumerState<AuthScreen> {
   // Step 1: User Login / Sign-up State
   AuthMode _authMode = AuthMode.signIn;
-  InputAuthMethod _authMethod = InputAuthMethod.email;
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _mobileCtrl = TextEditingController();
+  final _identifierCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  CountryCode _signUpCountry = CountryCode.defaultCountry;
+  CountryCode _signInCountry = CountryCode.defaultCountry;
+  CountryCode _otpCountry = CountryCode.defaultCountry;
+
+  // Sign-In with OTP State
+  bool _isSignInOtpMode = false;
+  bool _signInOtpSent = false;
+  final _signInOtpCtrl = TextEditingController();
+  int _signInOtpTimerSeconds = 0;
+  Timer? _signInOtpCountdownTimer;
+  String? _signInOtpFeedbackMessage;
 
   // Sign-Up Mobile OTP State (Mobile-First Verification Flow)
   bool _signUpOtpSent = false;
@@ -90,11 +102,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   @override
   void dispose() {
     _signUpCountdownTimer?.cancel();
+    _signInOtpCountdownTimer?.cancel();
     _otpCountdownTimer?.cancel();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _mobileCtrl.dispose();
+    _identifierCtrl.dispose();
     _passwordCtrl.dispose();
+    _signInOtpCtrl.dispose();
     _signUpOtpCtrl.dispose();
     _otpMobileCtrl.dispose();
     _otpCodeCtrl.dispose();
@@ -123,6 +138,81 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     );
   }
 
+  bool _isEmailIdentifier(String input) {
+    return input.trim().contains('@');
+  }
+
+  void _startSignInOtpTimer() {
+    _signInOtpCountdownTimer?.cancel();
+    setState(() {
+      _signInOtpTimerSeconds = 30;
+    });
+    _signInOtpCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_signInOtpTimerSeconds > 0) {
+        setState(() {
+          _signInOtpTimerSeconds--;
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  // Handle Send OTP for Sign-In Flow
+  Future<void> _handleSignInSendOtp() async {
+    final rawInput = _identifierCtrl.text.trim();
+    final cleanDigits = rawInput.replaceAll(RegExp(r'[^\d]'), '');
+    if (cleanDigits.length < _signInCountry.minDigits || cleanDigits.length > _signInCountry.maxDigits) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please enter a valid ${_signInCountry.minDigits}-${_signInCountry.maxDigits} digit mobile number for OTP sign-in.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final formatted = _signInCountry.formatFullNumber(cleanDigits);
+    final success = await ref.read(authProvider.notifier).sendOtp(formatted, purpose: 'signin');
+    if (success && mounted) {
+      setState(() {
+        _signInOtpSent = true;
+        _signInOtpFeedbackMessage = 'Verification code sent to $formatted';
+      });
+      _startSignInOtpTimer();
+    }
+  }
+
+  // Handle Verify OTP for Sign-In Flow
+  Future<void> _handleSignInVerifyOtp() async {
+    final cleanDigits = _identifierCtrl.text.trim().replaceAll(RegExp(r'[^\d]'), '');
+    final formatted = _signInCountry.formatFullNumber(cleanDigits);
+    final otp = _signInOtpCtrl.text.trim();
+
+    if (otp.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the 6-digit verification code.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final success = await ref.read(authProvider.notifier).signInWithOtp(
+          mobile: formatted,
+          otp: otp,
+        );
+
+    if (success && mounted) {
+      _signInOtpCountdownTimer?.cancel();
+      final auth = ref.read(authProvider);
+      if (auth.isSoftwareActivated) {
+        _onSuccessfulLogin();
+      }
+    }
+  }
+
   void _startSignUpOtpTimer() {
     _signUpCountdownTimer?.cancel();
     setState(() {
@@ -142,21 +232,23 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   // Handle Send OTP for Sign-Up Flow
   Future<void> _handleSignUpSendOtp() async {
     final mobile = _mobileCtrl.text.trim();
-    if (mobile.replaceAll(RegExp(r'[^\d]'), '').length < 10) {
+    final cleanDigits = mobile.replaceAll(RegExp(r'[^\d]'), '');
+    if (cleanDigits.length < _signUpCountry.minDigits || cleanDigits.length > _signUpCountry.maxDigits) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid 10-digit mobile number.'),
+        SnackBar(
+          content: Text('Please enter a valid ${_signUpCountry.minDigits}-${_signUpCountry.maxDigits} digit mobile number.'),
           backgroundColor: Colors.redAccent,
         ),
       );
       return;
     }
 
-    final success = await ref.read(authProvider.notifier).sendOtp(mobile);
+    final formatted = _signUpCountry.formatFullNumber(cleanDigits);
+    final success = await ref.read(authProvider.notifier).sendOtp(formatted, purpose: 'signup');
     if (success && mounted) {
       setState(() {
         _signUpOtpSent = true;
-        _signUpFeedbackMessage = 'OTP code sent via Twilio SMS to $mobile';
+        _signUpFeedbackMessage = 'Verification code sent to $formatted';
       });
       _startSignUpOtpTimer();
     }
@@ -164,7 +256,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   // Handle Verify OTP for Sign-Up Flow
   Future<void> _handleSignUpVerifyOtp() async {
-    final mobile = _mobileCtrl.text.trim();
+    final cleanDigits = _mobileCtrl.text.trim().replaceAll(RegExp(r'[^\d]'), '');
+    final formatted = _signUpCountry.formatFullNumber(cleanDigits);
     final otp = _signUpOtpCtrl.text.trim();
 
     if (otp.length < 4) {
@@ -178,7 +271,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
 
     final success = await ref.read(authProvider.notifier).verifyOtp(
-          mobile: mobile,
+          mobile: formatted,
           otp: otp,
         );
 
@@ -207,24 +300,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     });
   }
 
-  // Handle Send OTP via Twilio SMS
+  // Handle Send OTP via SMS
   Future<void> _handleSendOtp() async {
     final mobile = _otpMobileCtrl.text.trim();
-    if (mobile.replaceAll(RegExp(r'[^\d]'), '').length < 10) {
+    final cleanDigits = mobile.replaceAll(RegExp(r'[^\d]'), '');
+    if (cleanDigits.length < _otpCountry.minDigits || cleanDigits.length > _otpCountry.maxDigits) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid 10-digit mobile number.'),
+        SnackBar(
+          content: Text('Please enter a valid ${_otpCountry.minDigits}-${_otpCountry.maxDigits} digit mobile number.'),
           backgroundColor: Colors.redAccent,
         ),
       );
       return;
     }
 
-    final success = await ref.read(authProvider.notifier).sendOtp(mobile);
+    final formatted = _otpCountry.formatFullNumber(cleanDigits);
+    final success = await ref.read(authProvider.notifier).sendOtp(formatted);
     if (success && mounted) {
       setState(() {
         _isOtpSent = true;
-        _otpFeedbackMessage = 'OTP verification SMS sent to $mobile';
+        _otpFeedbackMessage = 'Verification code sent to $formatted';
       });
       _startOtpTimer();
     }
@@ -232,7 +327,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   // Handle Verify OTP Code
   Future<void> _handleVerifyOtp() async {
-    final mobile = _otpMobileCtrl.text.trim();
+    final cleanDigits = _otpMobileCtrl.text.trim().replaceAll(RegExp(r'[^\d]'), '');
+    final formatted = _otpCountry.formatFullNumber(cleanDigits);
     final otp = _otpCodeCtrl.text.trim();
 
     if (otp.length < 4) {
@@ -246,7 +342,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
 
     final success = await ref.read(authProvider.notifier).linkAndVerifyMobile(
-          mobile: mobile,
+          mobile: formatted,
           otp: otp,
         );
 
@@ -267,18 +363,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
     final strategy = isSignUp
         ? AuthStrategyFactory.createPhoneStrategy(
-            phone: _mobileCtrl.text.trim(),
+            phone: _signUpCountry.formatFullNumber(_mobileCtrl.text.trim()),
             password: password,
             name: name,
           )
-        : (_authMethod == InputAuthMethod.email
+        : (_isEmailIdentifier(_identifierCtrl.text)
             ? AuthStrategyFactory.createEmailStrategy(
-                email: _emailCtrl.text.trim(),
+                email: _identifierCtrl.text.trim(),
                 password: _passwordCtrl.text.trim(),
                 name: _nameCtrl.text.trim(),
               )
             : AuthStrategyFactory.createPhoneStrategy(
-                phone: _mobileCtrl.text.trim(),
+                phone: _signInCountry.formatFullNumber(_identifierCtrl.text.trim()),
                 password: _passwordCtrl.text.trim(),
                 name: _nameCtrl.text.trim(),
               ));
@@ -685,7 +781,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Offline-first vault, instant operator PIN shifts, raw ESC/POS thermal printing, and automatic Cloudflare D1 synchronization.',
+          'Offline-ready workstation, instant operator PIN shifts, high-speed receipt printing, and automatic cloud backup.',
           style: TextStyle(
             fontSize: 14,
             color: isDark ? Colors.grey[400] : Colors.grey[600],
@@ -693,11 +789,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           ),
         ),
         const SizedBox(height: 32),
-        _buildPillBenefit(Icons.security_rounded, 'Two-Tier Authentication & Activation Gate', isDark),
+        _buildPillBenefit(Icons.security_rounded, 'Secure Account & Device Protection', isDark),
         const SizedBox(height: 12),
-        _buildPillBenefit(Icons.offline_pin_rounded, '100% Offline Local Drift SQLite Vault', isDark),
+        _buildPillBenefit(Icons.offline_pin_rounded, '100% Offline Operation & Local Storage', isDark),
         const SizedBox(height: 12),
-        _buildPillBenefit(Icons.cloud_sync_rounded, 'Seamless Cloudflare D1 Edge Synchronization', isDark),
+        _buildPillBenefit(Icons.cloud_sync_rounded, 'Automatic Cloud Synchronization', isDark),
       ],
     );
   }
@@ -813,7 +909,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
               ),
               DossierBadge(
-                label: auth.isServerConnected ? 'SERVER READY' : 'OFFLINE MODE',
+                label: auth.isServerConnected ? 'ONLINE' : 'OFFLINE MODE',
                 variant: auth.isServerConnected ? DossierBadgeVariant.success : DossierBadgeVariant.warning,
               ),
             ],
@@ -837,33 +933,36 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      ref.read(authProvider.notifier).clearError();
-                      setState(() {
-                        _authMode = AuthMode.signIn;
-                        _signUpOtpSent = false;
-                        _signUpOtpVerified = false;
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _authMode == AuthMode.signIn
-                            ? (isDark ? const Color(0xFF1E293B) : Colors.white)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: _authMode == AuthMode.signIn
-                            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4)]
-                            : null,
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Sign In',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: _authMode == AuthMode.signIn ? FontWeight.w700 : FontWeight.w500,
+                  child: Tooltip(
+                    message: 'Sign into existing kiosk workstation account',
+                    child: InkWell(
+                      onTap: () {
+                        ref.read(authProvider.notifier).clearError();
+                        setState(() {
+                          _authMode = AuthMode.signIn;
+                          _signUpOtpSent = false;
+                          _signUpOtpVerified = false;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _authMode == AuthMode.signIn
+                              ? (isDark ? const Color(0xFF1E293B) : Colors.white)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: _authMode == AuthMode.signIn
+                              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4)]
+                              : null,
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Sign In',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: _authMode == AuthMode.signIn ? FontWeight.w700 : FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
@@ -871,29 +970,32 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   ),
                 ),
                 Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      ref.read(authProvider.notifier).clearError();
-                      setState(() => _authMode = AuthMode.signUp);
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: _authMode == AuthMode.signUp
-                            ? (isDark ? const Color(0xFF1E293B) : Colors.white)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: _authMode == AuthMode.signUp
-                            ? [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4)]
-                            : null,
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Sign Up',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: _authMode == AuthMode.signUp ? FontWeight.w700 : FontWeight.w500,
+                  child: Tooltip(
+                    message: 'Register a new center account and activate device',
+                    child: InkWell(
+                      onTap: () {
+                        ref.read(authProvider.notifier).clearError();
+                        setState(() => _authMode = AuthMode.signUp);
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _authMode == AuthMode.signUp
+                              ? (isDark ? const Color(0xFF1E293B) : Colors.white)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: _authMode == AuthMode.signUp
+                              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4)]
+                              : null,
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Sign Up',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: _authMode == AuthMode.signUp ? FontWeight.w700 : FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
@@ -905,52 +1007,61 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Method Choice: Email vs Mobile (Only for Sign-In)
-          if (!isSignUp) ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('Email & Password', style: TextStyle(fontSize: 12)),
-                  selected: _authMethod == InputAuthMethod.email,
-                  onSelected: (val) {
-                    ref.read(authProvider.notifier).clearError();
-                    setState(() => _authMethod = InputAuthMethod.email);
-                  },
-                ),
-                ChoiceChip(
-                  label: const Text('Mobile & Password', style: TextStyle(fontSize: 12)),
-                  selected: _authMethod == InputAuthMethod.mobile,
-                  onSelected: (val) {
-                    ref.read(authProvider.notifier).clearError();
-                    setState(() => _authMethod = InputAuthMethod.mobile);
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-
           // Error banner
           if (auth.errorMessage != null) ...[
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.red.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      auth.errorMessage!,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                    ),
+                  Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          auth.errorMessage!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        ),
+                      ),
+                    ],
                   ),
+                  if (isSignUp &&
+                      (auth.errorMessage!.contains('already exists') || auth.errorMessage!.contains('sign in'))) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Tooltip(
+                        message: 'Switch to Sign In mode with prefilled phone number',
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          ),
+                          onPressed: () {
+                            final mob = _mobileCtrl.text.trim();
+                            ref.read(authProvider.notifier).clearError();
+                            setState(() {
+                              _authMode = AuthMode.signIn;
+                              _isSignInOtpMode = false;
+                              _identifierCtrl.text = mob;
+                            });
+                          },
+                          icon: const Icon(Icons.login_rounded, size: 14, color: Color(0xFF6366F1)),
+                          label: const Text(
+                            'Switch to Sign In →',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF6366F1)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -982,18 +1093,61 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             const SizedBox(height: 14),
           ],
 
+          // Sign-In OTP Feedback Banner
+          if (!isSignUp && _isSignInOtpMode && _signInOtpFeedbackMessage != null && auth.errorMessage == null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF10B981), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _signInOtpFeedbackMessage!,
+                      style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
           // ─── Flow 1A: SIGN-UP FLOW (Mobile OTP First) ───
           if (isSignUp) ...[
             if (!_signUpOtpVerified) ...[
               // Step 1: Just Mobile Number (No Password, No Name)
               if (!_signUpOtpSent) ...[
-                DossierInputField(
-                  key: const ValueKey('auth_mobile_field'),
-                  label: 'Mobile Number',
-                  hintText: '9876543210',
-                  controller: _mobileCtrl,
-                  prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
-                  keyboardType: TextInputType.phone,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: DossierCountryPicker(
+                        key: const ValueKey('signup_country_picker'),
+                        selectedCountry: _signUpCountry,
+                        onCountryChanged: (c) {
+                          setState(() => _signUpCountry = c);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DossierInputField(
+                        key: const ValueKey('auth_mobile_field'),
+                        label: 'Mobile Number',
+                        hintText: _signUpCountry.example,
+                        controller: _mobileCtrl,
+                        prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                        keyboardType: TextInputType.phone,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -1019,10 +1173,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.phone_android_rounded, size: 16),
+                          Text(_signUpCountry.flag, style: const TextStyle(fontSize: 16)),
                           const SizedBox(width: 6),
                           Text(
-                            '+91 ${_mobileCtrl.text}',
+                            _signUpCountry.formatFullNumber(_mobileCtrl.text),
                             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                           ),
                         ],
@@ -1067,7 +1221,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Twilio SMS sent. Dev bypass: 123456.',
+                          'A 6-digit verification code has been sent via SMS.',
                           style: TextStyle(fontSize: 11, color: Color(0xFF6366F1)),
                         ),
                       ),
@@ -1080,6 +1234,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   child: DossierButton(
                     key: const ValueKey('signup_verify_otp_button'),
                     text: 'Verify Code & Proceed',
+                    tooltip: 'Verify 6-digit code and proceed to account details',
                     icon: Icons.verified_user_rounded,
                     isLoading: auth.isLoading,
                     onPressed: _handleSignUpVerifyOtp,
@@ -1087,14 +1242,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
                 const SizedBox(height: 12),
                 Center(
-                  child: TextButton(
-                    onPressed: _signUpTimerSeconds > 0 || auth.isLoading ? null : _handleSignUpSendOtp,
-                    child: Text(
-                      _signUpTimerSeconds > 0 ? 'Resend code in ${_signUpTimerSeconds}s' : 'Resend OTP SMS',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _signUpTimerSeconds > 0 ? Colors.grey : const Color(0xFF6366F1),
+                  child: Tooltip(
+                    message: _signUpTimerSeconds > 0 ? 'Wait for countdown before requesting a new code' : 'Request a new SMS verification code',
+                    child: TextButton(
+                      onPressed: _signUpTimerSeconds > 0 || auth.isLoading ? null : _handleSignUpSendOtp,
+                      child: Text(
+                        _signUpTimerSeconds > 0 ? 'Resend code in ${_signUpTimerSeconds}s' : 'Resend OTP SMS',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _signUpTimerSeconds > 0 ? Colors.grey : const Color(0xFF6366F1),
+                        ),
                       ),
                     ),
                   ),
@@ -1115,7 +1273,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Verified Mobile: +91 ${_mobileCtrl.text}',
+                        'Verified Mobile: ${_signUpCountry.formatFullNumber(_mobileCtrl.text)}',
                         style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.w700, fontSize: 13),
                       ),
                     ),
@@ -1161,47 +1319,256 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
             ],
           ] else ...[
-            // ─── Flow 1B: SIGN-IN FLOW ───
-            if (_authMethod == InputAuthMethod.email)
-              DossierInputField(
-                key: const ValueKey('auth_email_field'),
-                label: 'Email Address',
-                hintText: 'admin@csc.in',
-                controller: _emailCtrl,
-                prefixIcon: const Icon(Icons.email_outlined, size: 18),
-                keyboardType: TextInputType.emailAddress,
-              )
-            else
-              DossierInputField(
-                key: const ValueKey('auth_mobile_field'),
-                label: 'Mobile Number',
-                hintText: '9876543210',
-                controller: _mobileCtrl,
-                prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
-                keyboardType: TextInputType.phone,
+            // ─── Flow 1B: SIGN-IN FLOW (Unified Identifier + Password or SMS OTP) ───
+            if (_isSignInOtpMode) ...[
+              // OTP Sign-In with Country Picker
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: DossierCountryPicker(
+                      key: const ValueKey('signin_country_picker'),
+                      selectedCountry: _signInCountry,
+                      onCountryChanged: (c) {
+                        setState(() => _signInCountry = c);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DossierInputField(
+                      key: const ValueKey('auth_identifier_field'),
+                      label: 'Mobile Number',
+                      hintText: _signInCountry.example,
+                      controller: _identifierCtrl,
+                      prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                      keyboardType: TextInputType.phone,
+                    ),
+                  ),
+                ],
               ),
+            ] else ...[
+              // Password Sign-In with Unified Email / Phone Identifier
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _identifierCtrl,
+                builder: (context, val, _) {
+                  final isEmail = val.text.contains('@');
+                  final isPhone = !isEmail && val.text.trim().isNotEmpty && RegExp(r'^\+?[\d\s\-]+$').hasMatch(val.text.trim());
+                  return DossierInputField(
+                    key: const ValueKey('auth_identifier_field'),
+                    label: isEmail ? 'Email Address' : (isPhone ? 'Mobile Number / E.164 (+)' : 'Email or Mobile Number'),
+                    hintText: isEmail ? 'admin@csc.in' : (isPhone ? '+91 9876543210' : 'admin@csc.in or 9876543210'),
+                    controller: _identifierCtrl,
+                    prefixIcon: Icon(
+                      isEmail
+                          ? Icons.email_outlined
+                          : (isPhone ? Icons.phone_android_rounded : Icons.alternate_email_rounded),
+                      size: 18,
+                    ),
+                    keyboardType: isEmail
+                        ? TextInputType.emailAddress
+                        : (isPhone ? TextInputType.phone : TextInputType.text),
+                  );
+                },
+              ),
+            ],
             const SizedBox(height: 12),
 
-            DossierInputField(
-              key: const ValueKey('auth_password_field'),
-              label: 'Password',
-              hintText: '••••••••',
-              controller: _passwordCtrl,
-              obscureText: true,
-              prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
-            ),
-            const SizedBox(height: 20),
-
-            // Primary Sign-In CTA Button
-            SizedBox(
-              width: double.infinity,
-              child: DossierButton(
-                text: 'Sign In to Dossier',
-                icon: Icons.login_rounded,
-                isLoading: auth.isLoading,
-                onPressed: _handleUserAuth,
+            if (!_isSignInOtpMode) ...[
+              // Mode 1: Default Password Sign-In
+              DossierInputField(
+                key: const ValueKey('auth_password_field'),
+                label: 'Password',
+                hintText: '••••••••',
+                controller: _passwordCtrl,
+                obscureText: true,
+                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
               ),
-            ),
+              const SizedBox(height: 20),
+
+              // Primary Sign-In CTA Button
+              SizedBox(
+                width: double.infinity,
+                child: DossierButton(
+                  key: const ValueKey('auth_signin_button'),
+                  text: 'Sign In to Dossier',
+                  icon: Icons.login_rounded,
+                  isLoading: auth.isLoading,
+                  onPressed: _handleUserAuth,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              Center(
+                child: TextButton.icon(
+                  key: const ValueKey('switch_to_otp_signin_button'),
+                  onPressed: () {
+                    ref.read(authProvider.notifier).clearError();
+                    setState(() {
+                      _isSignInOtpMode = true;
+                      _signInOtpSent = false;
+                      _signInOtpCtrl.clear();
+                    });
+                  },
+                  icon: const Icon(Icons.sms_outlined, size: 16),
+                  label: const Text(
+                    'Sign in with SMS OTP instead',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF6366F1)),
+                  ),
+                ),
+              ),
+            ] else ...[
+              // Mode 2: SMS OTP Sign-In
+              if (!_signInOtpSent) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: DossierButton(
+                    key: const ValueKey('signin_send_otp_button'),
+                    text: 'Send Sign-In OTP',
+                    icon: Icons.sms_rounded,
+                    isLoading: auth.isLoading,
+                    onPressed: _handleSignInSendOtp,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Center(
+                  child: TextButton.icon(
+                    key: const ValueKey('switch_to_password_signin_button'),
+                    onPressed: () {
+                      ref.read(authProvider.notifier).clearError();
+                      setState(() {
+                        _isSignInOtpMode = false;
+                        _signInOtpSent = false;
+                      });
+                    },
+                    icon: const Icon(Icons.lock_outline_rounded, size: 16),
+                    label: const Text(
+                      'Sign in with Password instead',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF6366F1)),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                // OTP code entry for sign-in
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Text(_signInCountry.flag, style: const TextStyle(fontSize: 16)),
+                          const SizedBox(width: 6),
+                          Text(
+                            _signInCountry.formatFullNumber(_identifierCtrl.text),
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _signInOtpSent = false;
+                            _signInOtpCtrl.clear();
+                            _signInOtpCountdownTimer?.cancel();
+                          });
+                        },
+                        child: const Text(
+                          'Change',
+                          style: TextStyle(color: Color(0xFF6366F1), fontWeight: FontWeight.w600, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DossierInputField(
+                  key: const ValueKey('signin_otp_field'),
+                  label: '6-Digit Verification Code',
+                  hintText: '••••••',
+                  controller: _signInOtpCtrl,
+                  prefixIcon: const Icon(Icons.security_rounded, size: 18),
+                  keyboardType: TextInputType.number,
+                  autofocus: true,
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.2)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFF6366F1)),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'A 6-digit verification code has been sent via SMS.',
+                          style: TextStyle(fontSize: 11, color: Color(0xFF6366F1)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: DossierButton(
+                    key: const ValueKey('signin_verify_otp_button'),
+                    text: 'Verify & Sign In',
+                    tooltip: 'Verify code and open kiosk workstation',
+                    icon: Icons.verified_user_rounded,
+                    isLoading: auth.isLoading,
+                    onPressed: _handleSignInVerifyOtp,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Tooltip(
+                      message: _signInOtpTimerSeconds > 0 ? 'Wait for countdown before requesting a new code' : 'Request a new sign-in code via SMS',
+                      child: TextButton(
+                        onPressed: _signInOtpTimerSeconds > 0 || auth.isLoading ? null : _handleSignInSendOtp,
+                        child: Text(
+                          _signInOtpTimerSeconds > 0 ? 'Resend in ${_signInOtpTimerSeconds}s' : 'Resend OTP',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _signInOtpTimerSeconds > 0 ? Colors.grey : const Color(0xFF6366F1),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Tooltip(
+                      message: 'Switch back to signing in with your account password',
+                      child: TextButton(
+                        onPressed: () {
+                          ref.read(authProvider.notifier).clearError();
+                          setState(() {
+                            _isSignInOtpMode = false;
+                            _signInOtpSent = false;
+                          });
+                        },
+                        child: const Text(
+                          'Use Password',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF6366F1)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ],
           const SizedBox(height: 20),
 
@@ -1222,27 +1589,30 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           const SizedBox(height: 16),
 
           // Google SSO Option
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: auth.isLoading ? null : _handleGoogleSso,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                side: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              icon: Image.network(
-                'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                width: 18,
-                height: 18,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.account_circle, size: 18, color: Color(0xFF4285F4)),
-              ),
-              label: Text(
-                'Continue with Google',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+          Tooltip(
+            message: 'Sign in quickly and securely with your Google Account',
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: auth.isLoading ? null : _handleGoogleSso,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: Image.network(
+                  'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
+                  width: 18,
+                  height: 18,
+                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.account_circle, size: 18, color: Color(0xFF4285F4)),
+                ),
+                label: Text(
+                  'Continue with Google',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
                 ),
               ),
             ),
@@ -1257,7 +1627,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   // ─────────────────────────────────────────────────────────────
   Widget _buildMobileVerificationCard(AuthState auth, bool isDark) {
     if (_otpMobileCtrl.text.isEmpty && auth.user?.phone != null && auth.user!.phone!.isNotEmpty) {
-      _otpMobileCtrl.text = auth.user!.phone!.replaceAll('+91', '').replaceAll(' ', '');
+      final detected = CountryCode.detectFromPhoneString(auth.user!.phone!);
+      _otpCountry = detected;
+      final clean = auth.user!.phone!.replaceAll(detected.dialCode, '').replaceAll(' ', '');
+      _otpMobileCtrl.text = clean;
     }
 
     return DossierCard(
@@ -1300,7 +1673,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           ),
                         ),
                         const DossierBadge(
-                          label: 'TWILIO OTP',
+                          label: 'SMS VERIFICATION',
                           variant: DossierBadgeVariant.info,
                         ),
                       ],
@@ -1327,7 +1700,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'To prevent spam registrations and ghost accounts, every kiosk operator must verify their mobile phone number via Twilio SMS before completing workstation activation.',
+            'To protect your account and verify your identity, please verify your mobile phone number before completing workstation setup.',
             style: TextStyle(fontSize: 13, color: isDark ? Colors.grey[400] : Colors.grey[600], height: 1.4),
           ),
           const SizedBox(height: 20),
@@ -1380,15 +1753,33 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             const SizedBox(height: 14),
           ],
 
-          // Phone Number Input
-          DossierInputField(
-            key: const ValueKey('otp_mobile_field'),
-            label: 'Mobile Number',
-            hintText: '9876543210',
-            controller: _otpMobileCtrl,
-            enabled: !_isOtpSent,
-            prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
-            keyboardType: TextInputType.phone,
+          // Phone Number Input with Country Code Picker
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: DossierCountryPicker(
+                  key: const ValueKey('otp_country_picker'),
+                  selectedCountry: _otpCountry,
+                  onCountryChanged: (c) {
+                    setState(() => _otpCountry = c);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: DossierInputField(
+                  key: const ValueKey('otp_mobile_field'),
+                  label: 'Mobile Number',
+                  hintText: _otpCountry.example,
+                  controller: _otpMobileCtrl,
+                  enabled: !_isOtpSent,
+                  prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+                  keyboardType: TextInputType.phone,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
 
@@ -1398,6 +1789,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               child: DossierButton(
                 key: const ValueKey('send_otp_button'),
                 text: 'Send Verification OTP',
+                tooltip: 'Send 6-digit SMS verification code to this phone number',
                 icon: Icons.sms_rounded,
                 isLoading: auth.isLoading,
                 onPressed: _handleSendOtp,
@@ -1416,7 +1808,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Dev Hint
+            // Customer Verification Hint
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -1430,7 +1822,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Twilio SMS sent. In offline/dev mode, you can also enter 123456.',
+                      'A 6-digit verification code has been sent via SMS.',
                       style: TextStyle(fontSize: 11, color: Color(0xFF6366F1)),
                     ),
                   ),
@@ -1445,6 +1837,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               child: DossierButton(
                 key: const ValueKey('verify_otp_button'),
                 text: 'Verify Mobile & Continue',
+                tooltip: 'Verify code and continue to center workstation setup',
                 icon: Icons.verified_user_rounded,
                 isLoading: auth.isLoading,
                 onPressed: _handleVerifyOtp,
@@ -1456,26 +1849,32 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _isOtpSent = false;
-                      _otpCodeCtrl.clear();
-                      _otpFeedbackMessage = null;
-                      _otpCountdownTimer?.cancel();
-                    });
-                  },
-                  icon: const Icon(Icons.edit_rounded, size: 14),
-                  label: const Text('Change Number', style: TextStyle(fontSize: 12)),
+                Tooltip(
+                  message: 'Enter a different mobile phone number',
+                  child: TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _isOtpSent = false;
+                        _otpCodeCtrl.clear();
+                        _otpFeedbackMessage = null;
+                        _otpCountdownTimer?.cancel();
+                      });
+                    },
+                    icon: const Icon(Icons.edit_rounded, size: 14),
+                    label: const Text('Change Number', style: TextStyle(fontSize: 12)),
+                  ),
                 ),
-                TextButton(
-                  onPressed: _otpTimerSeconds > 0 || auth.isLoading ? null : _handleSendOtp,
-                  child: Text(
-                    _otpTimerSeconds > 0 ? 'Resend in ${_otpTimerSeconds}s' : 'Resend OTP SMS',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _otpTimerSeconds > 0 ? Colors.grey : const Color(0xFF6366F1),
+                Tooltip(
+                  message: _otpTimerSeconds > 0 ? 'Wait for countdown before requesting a new code' : 'Request a new SMS verification code',
+                  child: TextButton(
+                    onPressed: _otpTimerSeconds > 0 || auth.isLoading ? null : _handleSendOtp,
+                    child: Text(
+                      _otpTimerSeconds > 0 ? 'Resend in ${_otpTimerSeconds}s' : 'Resend OTP SMS',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _otpTimerSeconds > 0 ? Colors.grey : const Color(0xFF6366F1),
+                      ),
                     ),
                   ),
                 ),

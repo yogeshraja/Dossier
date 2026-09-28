@@ -929,8 +929,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                 ),
                 const Divider(),
                 SwitchListTile(
-                  title: const Text('Auto-Trigger ESC/POS Paper Cut', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Sends GS V 66 0 full-cut pulse after invoice print', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  title: const Text('Automatic Paper Cut', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Automatically cuts receipt roll after printing invoice', style: TextStyle(fontSize: 11, color: Colors.grey)),
                   value: _autoCutReceipt,
                   onChanged: (val) => setState(() => _autoCutReceipt = val),
                   contentPadding: EdgeInsets.zero,

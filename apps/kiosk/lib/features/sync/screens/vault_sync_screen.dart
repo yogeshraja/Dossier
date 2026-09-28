@@ -302,7 +302,7 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
                     children: [
                       _buildDetailBadge('Root Directory', '/Dossier_Workspace', Icons.folder_open_rounded),
                       _buildDetailBadge('Last Sync', syncState.lastSyncedAt != null ? '${syncState.lastSyncedAt!.hour.toString().padLeft(2, '0')}:${syncState.lastSyncedAt!.minute.toString().padLeft(2, '0')}' : 'Never', Icons.access_time_rounded),
-                      _buildDetailBadge('Sync Protocol', 'Resilient SQLite Outbox', Icons.offline_pin_rounded),
+                      _buildDetailBadge('Backup Status', 'Local Vault Protected', Icons.offline_pin_rounded),
                     ],
                   ),
                 ],
@@ -337,14 +337,14 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
                           children: [
                             Flexible(
                               child: Text(
-                                _isProTier ? 'Dossier Pro (Managed Cloudflare R2 Vault)' : 'Free Tier (Bring Your Own Google Drive)',
+                                _isProTier ? 'Dossier Pro Cloud Vault' : 'Google Drive Cloud Storage',
                                 style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             const SizedBox(width: 8),
                             DossierBadge(
-                              label: _isProTier ? 'R2 ACTIVE' : 'DRIVE ACTIVE',
+                              label: _isProTier ? 'PRO VAULT' : 'GOOGLE DRIVE',
                               variant: _isProTier ? DossierBadgeVariant.success : DossierBadgeVariant.info,
                             ),
                           ],
@@ -352,22 +352,25 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
                         const SizedBox(height: 2),
                         Text(
                           _isProTier
-                              ? 'Instant zero-setup cloud backup via Cloudflare R2, multi-device counter PC sync, \$0 egress fees.'
-                              : 'Artifacts uploaded directly to personal Google Drive account (/Dossier_Workspace) via official Drive API v3.',
+                              ? 'Instant zero-setup cloud backup and multi-device workstation synchronization.'
+                              : 'Customer documents and receipts backed up directly to your connected Google Drive folder (/Dossier_Workspace).',
                           style: TextStyle(color: Colors.grey[500], fontSize: 11.5),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Switch(
-                    value: _isProTier,
-                    onChanged: (val) {
-                      setState(() => _isProTier = val);
-                      ref.read(syncProvider.notifier).setStorageTier(
-                            val ? StorageTierType.managedR2 : StorageTierType.byoGoogleDrive,
-                          );
-                    },
+                  Tooltip(
+                    message: _isProTier ? 'Switch to Google Drive Storage' : 'Switch to Dossier Pro Cloud Vault',
+                    child: Switch(
+                      value: _isProTier,
+                      onChanged: (val) {
+                        setState(() => _isProTier = val);
+                        ref.read(syncProvider.notifier).setStorageTier(
+                              val ? StorageTierType.managedR2 : StorageTierType.byoGoogleDrive,
+                            );
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -406,12 +409,12 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   const Text(
-                                    'Air-Gapped Backup & Restore',
+                                    'Offline Backup & Data Recovery',
                                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Export full SQLite snapshot to USB or restore disaster recovery bundle (.dossier)',
+                                    'Export full database snapshot to USB drive or restore from a backup archive (.dossier)',
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(color: Colors.grey[500], fontSize: 11),
@@ -466,10 +469,10 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Outbox Synchronization Queue
+            // Cloud Synchronization Queue
             DossierPanel(
-              title: 'SQLite Outbox Sync Queue',
-              subtitle: 'Pending mutations waiting for background upload',
+              title: 'Cloud Backup Queue',
+              subtitle: 'Pending changes waiting for background upload',
               leading: const Icon(Icons.outbox_rounded, size: 18, color: Color(0xFF6366F1)),
               badge: pendingSyncAsync.maybeWhen(
                 data: (queue) => DossierBadge(
@@ -485,7 +488,7 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
                   size: DossierButtonSize.sm,
                   variant: DossierButtonVariant.outline,
                   isLoading: syncState.isSyncing,
-                  tooltip: 'Immediately process and upload all pending queue items',
+                  tooltip: 'Immediately process and upload all pending backup items',
                   onPressed: syncState.isSyncing ? null : () => ref.read(syncProvider.notifier).triggerSync(),
                 ),
               ],
@@ -500,10 +503,10 @@ class _VaultSyncScreenState extends ConsumerState<VaultSyncScreen> {
                         children: [
                           const Icon(Icons.cloud_done_rounded, size: 44, color: Color(0xFF10B981)),
                           const SizedBox(height: 10),
-                          const Text('Outbox is 100% Synchronized!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          const Text('All Changes are Synchronized!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                           const SizedBox(height: 4),
                           Text(
-                            'All customer dossiers, cases, and scanned exhibits are backed up to Google Drive.',
+                            'All customer dossiers, cases, and scanned exhibits are backed up safely.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: Colors.grey[500], fontSize: 12),
                           ),

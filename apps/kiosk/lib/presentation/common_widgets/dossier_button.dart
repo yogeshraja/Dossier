@@ -301,9 +301,13 @@ class _DossierButtonState extends State<DossierButton> with TickerProviderStateM
       ),
     );
 
-    if (widget.tooltip != null && widget.tooltip!.isNotEmpty) {
+    final tooltipMessage = (widget.tooltip != null && widget.tooltip!.isNotEmpty)
+        ? widget.tooltip!
+        : widget.text;
+
+    if (tooltipMessage.isNotEmpty) {
       return Tooltip(
-        message: widget.tooltip!,
+        message: tooltipMessage,
         waitDuration: const Duration(milliseconds: 350),
         child: buttonWidget,
       );

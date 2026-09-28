@@ -4,25 +4,23 @@ import 'package:dossier/features/auth/domain/models/auth_user.dart';
 import 'package:dossier/features/auth/domain/strategies/auth_strategy.dart';
 import 'package:dossier/features/auth/models/operator_model.dart';
 
-/// Mobile Phone and Password Authentication Strategy
-class PhonePasswordAuthStrategy extends BaseAuthStrategy {
+/// Mobile Phone and OTP Authentication Strategy
+class PhoneOtpAuthStrategy extends BaseAuthStrategy {
   final String phone;
-  final String password;
-  final String? name;
+  final String otp;
   final http.Client? client;
 
-  const PhonePasswordAuthStrategy({
+  const PhoneOtpAuthStrategy({
     required this.phone,
-    required this.password,
-    this.name,
+    required this.otp,
     this.client,
   });
 
   @override
-  String get strategyId => 'phone_password';
+  String get strategyId => 'phone_otp';
 
   @override
-  String get displayName => 'Mobile & Password';
+  String get displayName => 'Mobile & OTP';
 
   @override
   AuthProviderType get providerType => AuthProviderType.mobile;
@@ -41,16 +39,13 @@ class PhonePasswordAuthStrategy extends BaseAuthStrategy {
 
   @override
   String? validate({bool isSignUp = false}) {
-    if (isSignUp && (name == null || name!.trim().isEmpty)) {
-      return 'Please enter your full name.';
-    }
     final cleanPhone = _cleanPhoneNumber(phone);
     final digitCount = cleanPhone.replaceAll(RegExp(r'\D'), '').length;
     if (digitCount < 7 || digitCount > 15) {
       return 'Please enter a valid mobile number.';
     }
-    if (password.trim().length < 6) {
-      return 'Password must be at least 6 characters long.';
+    if (otp.trim().length < 4) {
+      return 'Please enter the verification code.';
     }
     return null;
   }
@@ -63,20 +58,13 @@ class PhonePasswordAuthStrategy extends BaseAuthStrategy {
   }) async {
     final httpClient = this.client ?? client ?? http.Client();
     final cleanPhone = _cleanPhoneNumber(phone);
-    final cleanName = name?.trim().isNotEmpty == true ? name!.trim() : 'Admin';
-    final endpoint = isSignUp ? '$baseUrl/api/v1/auth/signup' : '$baseUrl/api/v1/auth/signin';
+    final cleanOtp = otp.trim();
+    final endpoint = '$baseUrl/api/v1/auth/signin-otp';
 
-    final payload = isSignUp
-        ? {
-            'name': cleanName,
-            'mobile': cleanPhone,
-            'password': password.trim(),
-            'authProvider': 'mobile',
-          }
-        : {
-            'identifier': cleanPhone,
-            'password': password.trim(),
-          };
+    final payload = {
+      'mobile': cleanPhone,
+      'otp': cleanOtp,
+    };
 
     try {
       final response = await httpClient
@@ -89,7 +77,7 @@ class PhonePasswordAuthStrategy extends BaseAuthStrategy {
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.statusCode == 200) {
         final token = data['token'] as String? ?? 'jwt_${DateTime.now().millisecondsSinceEpoch}';
         final userData = data['user'] as Map<String, dynamic>? ?? {};
         final user = AuthUser.fromJson(userData);
@@ -117,42 +105,45 @@ class PhonePasswordAuthStrategy extends BaseAuthStrategy {
         return StrategyAuthResult.success(
           user: user,
           token: token,
-          hasKiosk: hasKiosk || (!isSignUp && parsedOps.isNotEmpty),
+          hasKiosk: hasKiosk || parsedOps.isNotEmpty,
           operators: parsedOps,
           rawData: data,
         );
       } else {
-        return StrategyAuthResult.failure(data['error'] as String? ?? 'Authentication failed');
+        return StrategyAuthResult.failure(data['error'] as String? ?? 'OTP Authentication failed');
       }
     } catch (_) {
-      // Offline fallback
-      final isReturningSession = !isSignUp;
-      final offlineUser = AuthUser(
-        id: 'usr_offline_${cleanPhone.hashCode.abs()}',
-        name: cleanName,
-        phone: cleanPhone,
-        provider: AuthProviderType.mobile,
-        role: 'admin',
-        hasKiosk: isReturningSession,
-      );
+      // Offline fallback: allow '123456' or '1234'
+      if (cleanOtp == '123456' || cleanOtp == '1234') {
+        final offlineUser = AuthUser(
+          id: 'usr_offline_${cleanPhone.hashCode.abs()}',
+          name: 'Admin',
+          phone: cleanPhone,
+          provider: AuthProviderType.mobile,
+          role: 'admin',
+          hasKiosk: true,
+        );
 
-      final fallbackOp = KioskOperator(
-        id: offlineUser.id,
-        fullName: cleanName,
-        phone: cleanPhone,
-        role: OperatorRole.admin,
-        passwordHash: '',
-        pin: '1234',
-        kioskName: 'Main Kiosk Center',
-        createdAt: DateTime.now(),
-      );
+        final fallbackOp = KioskOperator(
+          id: offlineUser.id,
+          fullName: 'Admin',
+          phone: cleanPhone,
+          role: OperatorRole.admin,
+          passwordHash: '',
+          pin: '1234',
+          kioskName: 'Main Kiosk Center',
+          createdAt: DateTime.now(),
+        );
 
-      return StrategyAuthResult.success(
-        user: offlineUser,
-        token: 'offline_session_jwt_${DateTime.now().millisecondsSinceEpoch}',
-        hasKiosk: isReturningSession,
-        operators: isReturningSession ? [fallbackOp] : [],
-      );
+        return StrategyAuthResult.success(
+          user: offlineUser,
+          token: 'offline_session_jwt_${DateTime.now().millisecondsSinceEpoch}',
+          hasKiosk: true,
+          operators: [fallbackOp],
+        );
+      }
+
+      return StrategyAuthResult.failure('Could not reach verification server. Use 123456 for dev testing.');
     }
   }
 }

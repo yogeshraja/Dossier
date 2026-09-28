@@ -215,7 +215,7 @@ class _DailySalesRegisterScreenState extends ConsumerState<DailySalesRegisterScr
                             icon: Icons.print_rounded,
                             variant: DossierButtonVariant.primary,
                             size: DossierButtonSize.sm,
-                            tooltip: 'Generate and print ESC/POS thermal register closure receipt',
+                            tooltip: 'Generate and print end-of-day register closure receipt',
                             onPressed: () => _showEodSlipDialog(summary, reportState),
                           ),
                           loading: () => const SizedBox.shrink(),

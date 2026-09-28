@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'package:dossier/core/constants/app_constants.dart';
 import 'package:dossier/features/auth/domain/models/auth_user.dart';
 import 'package:dossier/features/auth/domain/strategies/auth_strategy.dart';
+import 'package:dossier/features/auth/domain/strategies/auth_strategy_factory.dart';
 import 'package:dossier/features/auth/models/operator_model.dart';
 
 class ServerAuthResult {
@@ -548,10 +549,12 @@ class ServerAuthApiService {
   Future<Map<String, dynamic>> sendOtp({
     required String mobile,
     String? appName,
+    String? purpose,
   }) async {
-    final payload = {
+    final payload = <String, dynamic>{
       'mobile': mobile.trim(),
       'appName': appName ?? 'Dossier',
+      'purpose': ?purpose,
     };
 
     try {
@@ -564,13 +567,16 @@ class ServerAuthApiService {
           )
           .timeout(const Duration(seconds: 8));
 
+      final data = jsonDecode(response.body) as Map<String, dynamic>? ?? {};
       if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+        return data;
       } else {
-        final data = jsonDecode(response.body) as Map<String, dynamic>?;
         return {
           'success': false,
-          'error': data?['error'] ?? 'Failed to send OTP (${response.statusCode})',
+          'error': data['error'] ?? 'Failed to send OTP (${response.statusCode})',
+          'isExistingUser': data['isExistingUser'] == true,
+          'isNewUser': data['isNewUser'] == true,
+          'statusCode': response.statusCode,
         };
       }
     } catch (e) {
@@ -582,6 +588,22 @@ class ServerAuthApiService {
         'mobile': mobile,
       };
     }
+  }
+
+  /// Sign In with Mobile Number and OTP
+  Future<StrategyAuthResult> signInWithOtp({
+    required String mobile,
+    required String otp,
+  }) async {
+    final strategy = AuthStrategyFactory.createPhoneOtpStrategy(
+      phone: mobile,
+      otp: otp,
+    );
+    return await strategy.authenticate(
+      baseUrl: baseUrl,
+      isSignUp: false,
+      client: _client,
+    );
   }
 
   /// Verify OTP code for a mobile number

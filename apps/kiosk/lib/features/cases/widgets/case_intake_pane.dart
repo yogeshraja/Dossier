@@ -365,8 +365,8 @@ class CaseIntakePane extends ConsumerWidget {
 
                               // Document Exhibits Slot Manager via DossierPanel
                               DossierPanel(
-                                title: 'Case Exhibits & Scanned Artifacts',
-                                subtitle: 'Local document vault & exhibits repository',
+                                title: 'Attached Documents & Scans',
+                                subtitle: 'Customer files, proofs, and application documents',
                                 leading: const Icon(Icons.inventory_2_rounded, size: 18, color: Color(0xFF6366F1)),
                                 badge: exhibitsAsync.maybeWhen(
                                   data: (ex) => DossierBadge(label: '${ex.length}', variant: DossierBadgeVariant.neutral),
@@ -378,6 +378,7 @@ class CaseIntakePane extends ConsumerWidget {
                                     icon: Icons.attach_file_rounded,
                                     size: DossierButtonSize.sm,
                                     variant: DossierButtonVariant.primary,
+                                    tooltip: 'Attach or scan a document to this case',
                                     onPressed: () => _openAttachDialog(context, activeCase.id),
                                   ),
                                 ],
@@ -527,7 +528,7 @@ class CaseIntakePane extends ConsumerWidget {
                               // Notes & Remarks Panel
                               DossierPanel(
                                 title: 'Customer Remarks & Instructions',
-                                subtitle: 'Special notes for operator shifts and token follow-ups',
+                                subtitle: 'Special instructions, portal tokens, or follow-up details',
                                 leading: const Icon(Icons.sticky_note_2_rounded, size: 18, color: Color(0xFFF59E0B)),
                                 isCollapsible: true,
                                 initiallyExpanded: (activeDossier.notes ?? '').isNotEmpty,
@@ -538,7 +539,7 @@ class CaseIntakePane extends ConsumerWidget {
                                     children: [
                                       DossierInputField(
                                         initialValue: activeDossier.notes ?? '',
-                                        hintText: 'Enter operator remarks, portal application token, or document requirements...',
+                                        hintText: 'Enter customer notes, portal application token, or document requirements...',
                                         maxLines: 3,
                                         onChanged: (val) {
                                           ref.read(databaseProvider).updateDossierNotes(activeDossier.id, val);

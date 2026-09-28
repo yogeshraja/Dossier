@@ -261,8 +261,8 @@ void main() {
 
       expect(find.text('Kiosk Hardware & Vault Diagnostics'), findsOneWidget);
       expect(find.text('Cloud Vault Engine'), findsOneWidget);
-      expect(find.text('ESC/POS Thermal Printer'), findsOneWidget);
-      expect(find.text('DRIVER READY'), findsOneWidget);
+      expect(find.text('Thermal Receipt Printer'), findsOneWidget);
+      expect(find.text('PRINTER READY'), findsOneWidget);
     });
 
     testWidgets('8. DossierToast renders and invokes action callbacks', (tester) async {

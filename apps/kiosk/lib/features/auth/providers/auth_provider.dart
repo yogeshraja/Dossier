@@ -698,7 +698,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// Send OTP to mobile number via Twilio
-  Future<bool> sendOtp(String mobile) async {
+  Future<bool> sendOtp(String mobile, {String? purpose}) async {
     final cleanMobile = mobile.trim();
     if (cleanMobile.replaceAll(RegExp(r'[^\d]'), '').length < 10) {
       state = state.copyWith(errorMessage: 'Please enter a valid 10-digit mobile number.');
@@ -706,7 +706,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     state = state.copyWith(isLoading: true, clearErrorMessage: true);
-    final res = await _serverAuthApi.sendOtp(mobile: cleanMobile);
+    final res = await _serverAuthApi.sendOtp(mobile: cleanMobile, purpose: purpose);
 
     state = state.copyWith(isLoading: false);
     if (res['success'] == true) {
@@ -715,6 +715,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(errorMessage: res['error'] as String? ?? 'Failed to send verification SMS.');
       return false;
     }
+  }
+
+  /// Sign In with Mobile Number and OTP
+  Future<bool> signInWithOtp({
+    required String mobile,
+    required String otp,
+  }) async {
+    final strategy = AuthStrategyFactory.createPhoneOtpStrategy(
+      phone: mobile,
+      otp: otp,
+    );
+    return authenticateWithStrategy(strategy, isSignUp: false);
   }
 
   /// Verify OTP code for a mobile number and link to current user if logged in
