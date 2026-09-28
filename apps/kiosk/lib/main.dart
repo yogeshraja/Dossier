@@ -13,6 +13,7 @@ import 'package:dossier/features/billing_pos/widgets/billing_hub_pane.dart';
 import 'package:dossier/features/media_prep/screens/media_prep_studio_screen.dart';
 import 'package:dossier/features/billing_pos/screens/quick_pos_screen.dart';
 import 'package:dossier/features/billing_pos/screens/daily_sales_register_screen.dart';
+import 'package:dossier/features/settings/screens/services_catalog_screen.dart';
 import 'package:dossier/features/settings/screens/settings_screen.dart';
 import 'package:dossier/presentation/screens/splash_screen.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
@@ -238,6 +239,7 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
             NavigationDestination(icon: Icon(Icons.burst_mode_outlined), selectedIcon: Icon(Icons.burst_mode_rounded), label: 'Media'),
             NavigationDestination(icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale_rounded), label: 'POS'),
             NavigationDestination(icon: Icon(Icons.analytics_outlined), selectedIcon: Icon(Icons.analytics_rounded), label: 'Register'),
+            NavigationDestination(icon: Icon(Icons.format_list_bulleted_outlined), selectedIcon: Icon(Icons.format_list_bulleted_rounded), label: 'Catalog'),
             NavigationDestination(icon: Icon(Icons.tune_outlined), selectedIcon: Icon(Icons.tune_rounded), label: 'Settings'),
           ],
         ),
@@ -373,6 +375,8 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
       case 3:
         return const DailySalesRegisterScreen();
       case 4:
+        return const ServicesCatalogScreen();
+      case 5:
         return const SettingsScreen();
       default:
         return const SizedBox();

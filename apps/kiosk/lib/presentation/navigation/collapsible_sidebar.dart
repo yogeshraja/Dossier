@@ -58,10 +58,16 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
       tooltip: 'End-of-Day Register & Cash Reconciliation',
     ),
     (
+      icon: Icons.format_list_bulleted_outlined,
+      activeIcon: Icons.format_list_bulleted_rounded,
+      label: 'Services Catalog',
+      tooltip: 'Master Catalog, Pricing & Opt-in Categories',
+    ),
+    (
       icon: Icons.tune_outlined,
       activeIcon: Icons.tune_rounded,
       label: 'Settings & Vault',
-      tooltip: 'Services Catalog, Cloud Vault & Kiosk Config',
+      tooltip: 'Kiosk Settings, Cloud Vault & User Profiles',
     ),
   ];
 

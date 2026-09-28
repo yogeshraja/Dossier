@@ -9,6 +9,7 @@ import 'package:dossier/features/billing_pos/screens/daily_sales_register_screen
 import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/domain/services/esc_pos_printer_service.dart';
 import 'package:dossier/features/sync/screens/vault_sync_screen.dart';
+import 'package:dossier/features/settings/screens/services_catalog_screen.dart';
 import 'package:dossier/features/settings/screens/settings_screen.dart';
 import 'package:dossier/features/auth/screens/auth_screen.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
@@ -66,6 +67,7 @@ void main() {
       expect(find.text('Media Studio'), findsOneWidget);
       expect(find.text('POS & Billing'), findsOneWidget);
       expect(find.text('Daily Register'), findsOneWidget);
+      expect(find.text('Services Catalog'), findsOneWidget);
       expect(find.text('Settings & Vault'), findsOneWidget);
     });
 
@@ -184,6 +186,25 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('Cloud Vault & Sync'), findsWidgets);
+    });
+
+    testWidgets('ServicesCatalogScreen renders without overflows on phone & desktop', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: ServicesCatalogScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Services & Price Catalog'), findsOneWidget);
     });
 
     testWidgets('SettingsScreen renders without overflows on phone & desktop', (WidgetTester tester) async {

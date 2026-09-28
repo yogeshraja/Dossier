@@ -166,13 +166,13 @@ class _CommandPaletteDialogState extends ConsumerState<CommandPaletteDialog> {
     ));
 
     items.add(CommandItem(
-      id: 'nav_sync',
-      title: 'Go to Cloud Vault Sync (Settings)',
-      subtitle: 'Google Drive & Cloudflare R2 backup status and outbox queue',
-      icon: Icons.cloud_sync_rounded,
-      iconColor: const Color(0xFF8B5CF6),
+      id: 'nav_catalog',
+      title: 'Go to Services Catalog',
+      subtitle: 'Master services catalog, portal fees, shop rates and required document exhibits',
+      icon: Icons.format_list_bulleted_rounded,
+      iconColor: const Color(0xFF6366F1),
       category: CommandCategory.navigation,
-      keywords: ['sync', 'cloud', 'vault', 'backup', 'drive', 'r2', 'queue', 'settings'],
+      keywords: ['catalog', 'services', 'pricing', 'rates', 'fees', 'schemes', 'exhibits'],
       onSelect: () {
         widget.onNavigateTab?.call(4);
         Navigator.of(context).pop();
@@ -182,13 +182,13 @@ class _CommandPaletteDialogState extends ConsumerState<CommandPaletteDialog> {
     items.add(CommandItem(
       id: 'nav_settings',
       title: 'Go to Settings & Profile Hub',
-      subtitle: 'Service catalog pricing, cloud vault sync, printer setup and kiosk preferences',
+      subtitle: 'Operator profile, cloud vault sync, printer setup, and team administration',
       icon: Icons.tune_rounded,
       iconColor: const Color(0xFFEC4899),
       category: CommandCategory.navigation,
-      keywords: ['settings', 'config', 'printer', 'prices', 'catalog', 'services', 'vault'],
+      keywords: ['settings', 'config', 'printer', 'vault', 'sync', 'team', 'profile'],
       onSelect: () {
-        widget.onNavigateTab?.call(4);
+        widget.onNavigateTab?.call(5);
         Navigator.of(context).pop();
       },
     ));

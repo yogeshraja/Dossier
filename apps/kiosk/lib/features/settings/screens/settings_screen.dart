@@ -1,13 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:dossier/features/auth/models/operator_model.dart';
 import 'package:dossier/features/auth/providers/auth_provider.dart';
 import 'package:dossier/features/auth/screens/auth_screen.dart';
-import 'package:dossier/features/dossiers/providers/dossier_providers.dart';
 import 'package:dossier/features/settings/providers/settings_provider.dart';
-import 'package:dossier/features/settings/widgets/edit_service_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
@@ -55,15 +52,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
   String _receiptPaperWidth = '80mm';
   bool _soundFeedback = true;
 
-  static const _categoryLabels = {
-    'GOVT_SCHEME': 'Govt Schemes',
-    'PRINTING': 'Printing & Xerox',
-    'CERTIFICATE': 'Certificates',
-    'UTILITY': 'Utility Bills',
-    'LEGAL': 'Legal & Typing',
-    'FINANCIAL': 'Financial',
-  };
-
   static const _currencyPresets = [
     {'symbol': '₹', 'code': 'INR', 'label': '₹ INR'},
     {'symbol': '\$', 'code': 'USD', 'label': '\$ USD'},
@@ -77,7 +65,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this, initialIndex: widget.initialTabIndex.clamp(0, 5));
+    _tabController = TabController(length: 5, vsync: this, initialIndex: widget.initialTabIndex.clamp(0, 4));
 
     final settings = ref.read(kioskSettingsProvider);
     _kioskNameCtrl.text = settings.kioskName;
@@ -585,7 +573,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                         unselectedLabelColor: Colors.grey,
                         tabs: const [
                           Tab(text: 'My Profile'),
-                          Tab(text: 'Catalog'),
                           Tab(text: 'Vault & Sync'),
                           Tab(text: 'Appearance'),
                           Tab(text: 'Kiosk Identity'),
@@ -615,7 +602,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
                               overflow: TextOverflow.ellipsis),
                           const SizedBox(height: 2),
-                          const Text('Personal operator profiles, catalog pricing, cloud vault sync, team administration, and hardware defaults',
+                          const Text('Personal operator profiles, cloud vault sync, team administration, and hardware defaults',
                               style: TextStyle(fontSize: 11, color: Colors.grey),
                               overflow: TextOverflow.ellipsis),
                         ],
@@ -623,7 +610,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                     ),
                     const SizedBox(width: 16),
                     SizedBox(
-                      width: 680,
+                      width: 600,
                       child: TabBar(
                         controller: _tabController,
                         isScrollable: true,
@@ -633,7 +620,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
                         unselectedLabelColor: Colors.grey,
                         tabs: const [
                           Tab(icon: Icon(Icons.person_rounded, size: 15), text: 'My Profile'),
-                          Tab(icon: Icon(Icons.format_list_bulleted_rounded, size: 15), text: 'Services Catalog'),
                           Tab(icon: Icon(Icons.cloud_sync_rounded, size: 15), text: 'Vault & Sync'),
                           Tab(icon: Icon(Icons.palette_rounded, size: 15), text: 'Appearance'),
                           Tab(icon: Icon(Icons.storefront_rounded, size: 15), text: 'Kiosk Profile'),
@@ -653,7 +639,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
               controller: _tabController,
               children: [
                 _buildUserProfileTab(authState, isDark),
-                _buildServicesCatalogTab(settings, isDark),
                 const VaultSyncScreen(),
                 _buildCurrencyThemeTab(settings, isDark),
                 _buildKioskProfileTab(settings, authState, isDark),
@@ -1041,167 +1026,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with SingleTick
           ],
         ),
       ],
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Tab 2: Services Catalog & Opt-ins
-  // ─────────────────────────────────────────────────────────────
-  Widget _buildServicesCatalogTab(KioskSettings settings, bool isDark) {
-    final servicesAsync = ref.watch(activeServicesStreamProvider);
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Category Opt-ins Bar
-          DossierCard(
-            variant: DossierCardVariant.flat,
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Active Service Category Opt-Ins:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: _categoryLabels.entries.map((entry) {
-                    final isOptedIn = settings.activeCategories.contains(entry.key);
-                    return FilterChip(
-                      selected: isOptedIn,
-                      label: Text(entry.value, style: const TextStyle(fontSize: 11.5)),
-                      visualDensity: VisualDensity.compact,
-                      selectedColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-                      checkmarkColor: Theme.of(context).colorScheme.primary,
-                      onSelected: (_) => ref.read(kioskSettingsProvider.notifier).toggleCategory(entry.key),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Services Table Header
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              Text('Configured Master Services',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
-              DossierButton(
-                text: 'Add Custom Service',
-                icon: Icons.add_rounded,
-                size: DossierButtonSize.sm,
-                variant: DossierButtonVariant.primary,
-                onPressed: () {
-                  DossierDialog.show(
-                    context: context,
-                    builder: (_) => const EditServiceDialog(),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Services List
-          Expanded(
-            child: servicesAsync.when(
-              data: (services) {
-                if (services.isEmpty) {
-                  return const Center(child: Text('No services configured'));
-                }
-
-                return ListView.separated(
-                  itemCount: services.length,
-                  separatorBuilder: (context, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final s = services[index];
-                    List<dynamic> docs = [];
-                    try {
-                      docs = jsonDecode(s.requiredDocsJson);
-                    } catch (_) {}
-
-                    return DossierCard(
-                      variant: DossierCardVariant.outlined,
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(Icons.description_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        s.name,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    DossierBadge(
-                                      label: _categoryLabels[s.category] ?? s.category,
-                                      variant: DossierBadgeVariant.neutral,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  'Portal: ${settings.currencySymbol}${s.defaultPortalFee.toStringAsFixed(0)}  •  Shop: ${settings.currencySymbol}${s.defaultServiceFee.toStringAsFixed(0)}  •  Total: ${settings.currencySymbol}${(s.defaultPortalFee + s.defaultServiceFee).toStringAsFixed(0)}',
-                                  style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 11.5, fontWeight: FontWeight.bold),
-                                ),
-                                if (docs.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Docs: ${docs.join(", ")}',
-                                    style: TextStyle(color: Colors.grey[500], fontSize: 10.5),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.edit_rounded, size: 16),
-                            tooltip: 'Edit Service',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () {
-                              DossierDialog.show(
-                                context: context,
-                                builder: (_) => EditServiceDialog(existingService: s),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(child: Text('Error loading services: $err')),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
