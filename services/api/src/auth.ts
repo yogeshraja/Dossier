@@ -7,6 +7,8 @@ type Bindings = {
   JWT_SECRET?: string;
   TWILIO_ACCOUNT_SID?: string;
   TWILIO_AUTH_TOKEN?: string;
+  TWILIO_VERIFY_SERVICE_SID?: string;
+  TWILIO_SERVICE_SID?: string;
   TWILIO_PHONE_NUMBER?: string;
 };
 
@@ -14,20 +16,28 @@ export const authRouter = new Hono<{ Bindings: Bindings }>();
 
 // GET /api/v1/auth/health
 authRouter.get("/health", async (c) => {
+  const verifySid = c.env.TWILIO_VERIFY_SERVICE_SID || c.env.TWILIO_SERVICE_SID;
+  const isTwilioReady = Boolean(
+    c.env.TWILIO_ACCOUNT_SID &&
+    c.env.TWILIO_AUTH_TOKEN &&
+    (verifySid || c.env.TWILIO_PHONE_NUMBER)
+  );
+
   return c.json({
     status: "online",
     server: "Dossier Cloudflare Edge",
     timestamp: new Date().toISOString(),
     version: "1.3.0",
-    twilioConfigured: Boolean(c.env.TWILIO_ACCOUNT_SID && c.env.TWILIO_AUTH_TOKEN && c.env.TWILIO_PHONE_NUMBER),
+    twilioConfigured: isTwilioReady,
+    authEngine: verifySid ? "Twilio Verify v2" : "Twilio SMS / Dev Mock",
   });
 });
 
 // ─────────────────────────────────────────────────────────────
-// OTP Verification Endpoints (Twilio SMS Integration)
+// OTP Verification Endpoints (Twilio Verify v2 Integration)
 // ─────────────────────────────────────────────────────────────
 
-// POST /api/v1/auth/otp/send - Send Twilio SMS OTP to Mobile Number
+// POST /api/v1/auth/otp/send - Send Twilio OTP Verification to Mobile Number
 authRouter.post("/otp/send", async (c) => {
   try {
     const body = await c.req.json<{
@@ -41,14 +51,32 @@ authRouter.post("/otp/send", async (c) => {
     }
 
     const formattedMobile = TwilioService.formatToE164(rawMobile);
-    const otp = TwilioService.generateOtp(6);
-    const otpHashed = await hashPin(otp);
     const db = c.env.DB;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString(); // 10 minutes expiry
     const otpId = `otp_${crypto.randomUUID()}`;
 
-    // Store in DB
+    // Send Verification via Twilio Verify Service (No phone number needed!)
+    const verifySid = c.env.TWILIO_VERIFY_SERVICE_SID || c.env.TWILIO_SERVICE_SID;
+    const twilio = new TwilioService({
+      accountSid: c.env.TWILIO_ACCOUNT_SID,
+      authToken: c.env.TWILIO_AUTH_TOKEN,
+      verifyServiceSid: verifySid,
+      fromNumber: c.env.TWILIO_PHONE_NUMBER,
+    });
+
+    const verifyResult = await twilio.sendVerification(formattedMobile);
+
+    if (!verifyResult.success) {
+      return c.json({
+        success: false,
+        error: verifyResult.error || "Failed to send verification code. Please check your phone number and try again.",
+      }, 500);
+    }
+
+    // Save pending verification record to local DB
+    const otp = TwilioService.generateOtp(6);
+    const otpHashed = await hashPin(otp);
     await db
       .prepare(
         "INSERT INTO otp_verifications (id, mobile, otp_hash, expires_at, attempts, is_verified, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)"
@@ -56,27 +84,11 @@ authRouter.post("/otp/send", async (c) => {
       .bind(otpId, formattedMobile, otpHashed, expiresAt, now.toISOString())
       .run();
 
-    // Send SMS via Twilio Service
-    const twilio = new TwilioService({
-      accountSid: c.env.TWILIO_ACCOUNT_SID,
-      authToken: c.env.TWILIO_AUTH_TOKEN,
-      fromNumber: c.env.TWILIO_PHONE_NUMBER,
-    });
-
-    const smsResult = await twilio.sendOtpSms(formattedMobile, otp, body.appName || "Dossier");
-
-    if (!smsResult.success) {
-      return c.json({
-        success: false,
-        error: smsResult.error || "Failed to deliver SMS. Please check your phone number and try again.",
-      }, 500);
-    }
-
     return c.json({
       success: true,
-      message: `OTP verification code sent to ${formattedMobile}`,
+      message: `Verification code sent to ${formattedMobile}`,
       mobile: formattedMobile,
-      isMock: smsResult.isMock || false,
+      isMock: verifyResult.isMock || false,
       expiresInSeconds: 600,
     });
   } catch (err: unknown) {
@@ -85,7 +97,7 @@ authRouter.post("/otp/send", async (c) => {
   }
 });
 
-// POST /api/v1/auth/otp/verify - Verify SMS OTP for Mobile Number
+// POST /api/v1/auth/otp/verify - Verify Twilio OTP Code for Mobile Number
 authRouter.post("/otp/verify", async (c) => {
   try {
     const body = await c.req.json<{
@@ -106,48 +118,51 @@ authRouter.post("/otp/verify", async (c) => {
     const db = c.env.DB;
     const now = new Date().toISOString();
 
-    // Find the latest pending OTP record for this mobile
-    const record = await db
+    // 1. Verify code via Twilio Verify API
+    const verifySid = c.env.TWILIO_VERIFY_SERVICE_SID || c.env.TWILIO_SERVICE_SID;
+    const twilio = new TwilioService({
+      accountSid: c.env.TWILIO_ACCOUNT_SID,
+      authToken: c.env.TWILIO_AUTH_TOKEN,
+      verifyServiceSid: verifySid,
+      fromNumber: c.env.TWILIO_PHONE_NUMBER,
+    });
+
+    const checkResult = await twilio.checkVerification(formattedMobile, otp);
+
+    // Fallback: check local database hash or dev mock bypass
+    let isApproved = checkResult.isApproved;
+    if (!isApproved) {
+      const isMockBypass = otp === "123456" || otp === "1234";
+      const record = await db
+        .prepare(
+          "SELECT * FROM otp_verifications WHERE mobile = ? AND is_verified = 0 AND expires_at > ? ORDER BY created_at DESC LIMIT 1"
+        )
+        .bind(formattedMobile, now)
+        .first<{ id: string; otp_hash: string; attempts: number }>();
+
+      if (record && ((await verifyPin(otp, record.otp_hash)) || isMockBypass)) {
+        isApproved = true;
+        await db.prepare("UPDATE otp_verifications SET is_verified = 1 WHERE id = ?").bind(record.id).run();
+      } else if (isMockBypass) {
+        isApproved = true;
+      }
+    }
+
+    if (!isApproved) {
+      return c.json({
+        success: false,
+        error: checkResult.error || "Incorrect or expired verification code. Please try again.",
+      }, 401);
+    }
+
+    // Record verified status in D1
+    const verifiedId = `otp_ok_${crypto.randomUUID()}`;
+    await db
       .prepare(
-        "SELECT * FROM otp_verifications WHERE mobile = ? AND is_verified = 0 AND expires_at > ? ORDER BY created_at DESC LIMIT 1"
+        "INSERT INTO otp_verifications (id, mobile, otp_hash, expires_at, attempts, is_verified, created_at) VALUES (?, ?, 'verified', ?, 0, 1, ?)"
       )
-      .bind(formattedMobile, now)
-      .first<{
-        id: string;
-        mobile: string;
-        otp_hash: string;
-        attempts: number;
-      }>();
-
-    // Allow dev mock bypass for '123456' / '1234'
-    const isMockBypass = otp === "123456" || otp === "1234";
-
-    if (!record && !isMockBypass) {
-      return c.json({ success: false, error: "OTP has expired or does not exist. Please request a new code." }, 400);
-    }
-
-    if (record) {
-      // Check max attempts
-      if (record.attempts >= 5) {
-        return c.json({ success: false, error: "Too many failed attempts. Please request a new OTP." }, 429);
-      }
-
-      // Verify OTP hash
-      const isValid = (await verifyPin(otp, record.otp_hash)) || isMockBypass;
-      if (!isValid) {
-        await db
-          .prepare("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id = ?")
-          .bind(record.id)
-          .run();
-        return c.json({ success: false, error: "Incorrect verification code. Please try again." }, 401);
-      }
-
-      // Mark OTP record as verified
-      await db
-        .prepare("UPDATE otp_verifications SET is_verified = 1 WHERE id = ?")
-        .bind(record.id)
-        .run();
-    }
+      .bind(verifiedId, formattedMobile, now, now)
+      .run();
 
     // If userId provided or user exists with this mobile, mark user's mobile as verified
     if (userId) {

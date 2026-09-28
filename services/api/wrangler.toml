@@ -10,7 +10,7 @@ JWT_SECRET = "dossier-kiosk-secret-key-change-in-production-2026"
 [[d1_databases]]
 binding = "DB"
 database_name = "dossier-db"
-database_id = "local-dossier-d1-id"
+database_id = "822c9f2a-ae44-4b3e-b09c-dbdd94f61ed5"
 
 # Optional R2 bucket for exhibit documents and scanned PDFs
 # [[r2_buckets]]
