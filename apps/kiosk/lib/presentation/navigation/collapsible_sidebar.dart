@@ -10,6 +10,7 @@ class CollapsibleSidebar extends StatefulWidget {
   final VoidCallback onShowOperatorMenu;
   final VoidCallback onToggleTheme;
   final VoidCallback? onOpenCommandPalette;
+  final VoidCallback? onLogout;
   final ThemeMode currentThemeMode;
   final bool isInitiallyCollapsed;
 
@@ -21,6 +22,7 @@ class CollapsibleSidebar extends StatefulWidget {
     required this.onShowOperatorMenu,
     required this.onToggleTheme,
     this.onOpenCommandPalette,
+    this.onLogout,
     required this.currentThemeMode,
     this.isInitiallyCollapsed = false,
   });
@@ -393,13 +395,13 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
                                   ),
                                   IconButton(
                                     icon: Icon(
-                                      widget.selectedIndex == 5 ? Icons.settings_rounded : Icons.settings_outlined,
+                                      Icons.logout_rounded,
                                       size: 16,
-                                      color: widget.selectedIndex == 5 ? primaryColor : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                     ),
-                                    tooltip: 'Open Settings',
+                                    tooltip: 'Sign Out / Lock Shift',
                                     visualDensity: VisualDensity.compact,
-                                    onPressed: () => widget.onDestinationSelected(5),
+                                    onPressed: widget.onLogout ?? widget.onShowOperatorMenu,
                                   ),
                                 ],
                               ),

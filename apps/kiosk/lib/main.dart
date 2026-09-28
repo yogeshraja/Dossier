@@ -173,6 +173,41 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
     );
   }
 
+  void _confirmSignOut(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => DossierDialog(
+        title: 'Sign Out / Lock Shift',
+        icon: Icons.logout_rounded,
+        content: const Text(
+          'Are you sure you want to sign out and lock your operator shift?',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          DossierButton(
+            text: 'Cancel',
+            variant: DossierButtonVariant.outline,
+            size: DossierButtonSize.sm,
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+          DossierButton(
+            text: 'Sign Out',
+            variant: DossierButtonVariant.danger,
+            icon: Icons.logout_rounded,
+            size: DossierButtonSize.sm,
+            onPressed: () {
+              ref.read(authProvider.notifier).logout();
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const AuthScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   void _openCommandPalette() {
     CommandPaletteDialog.show(
       context,
@@ -265,6 +300,7 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
               onShowOperatorMenu: () => _showOperatorMenu(context),
               onToggleTheme: () => ref.read(kioskSettingsProvider.notifier).toggleTheme(),
               onOpenCommandPalette: _openCommandPalette,
+              onLogout: () => _confirmSignOut(context),
               currentThemeMode: settings.themeMode,
               isInitiallyCollapsed: !isDesktop,
             ),
