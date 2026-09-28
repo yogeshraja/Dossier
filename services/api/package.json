@@ -7,14 +7,18 @@
     "dev": "wrangler dev",
     "build": "tsc --noEmit",
     "deploy": "wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:studio": "drizzle-kit studio",
     "db:init:local": "wrangler d1 execute dossier-db --local --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute dossier-db --remote --file=./schema.sql"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.3",
     "hono": "^4.6.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241022.0",
+    "drizzle-kit": "^0.31.11",
     "typescript": "^5.6.3",
     "wrangler": "^4.143.0"
   }

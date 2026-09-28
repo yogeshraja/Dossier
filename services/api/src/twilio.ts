@@ -1,9 +1,12 @@
 /**
  * Twilio Verify Service (Twilio Verify v2 REST API)
+ * Monorepo: Dossier Cloudflare Edge Serverless API
  * Does NOT require purchasing a phone number. Uses Twilio Verify Service SID (VA...).
  * Handles OTP generation, SMS delivery, rate limiting, and verification check automatically.
  * Supports graceful fallback for local development / testing.
  */
+
+import { AUTH_CONSTANTS, TWILIO_CONSTANTS } from "./constants";
 
 export interface TwilioConfig {
   accountSid?: string;
@@ -33,16 +36,16 @@ export class TwilioService {
     if (cleaned.startsWith("+")) {
       return cleaned;
     }
-    if (cleaned.length === 10) {
-      return `+91${cleaned}`;
+    if (cleaned.length === AUTH_CONSTANTS.MIN_MOBILE_DIGITS) {
+      return `${AUTH_CONSTANTS.DEFAULT_COUNTRY_DIAL_CODE}${cleaned}`;
     }
     return `+${cleaned}`;
   }
 
   /**
-   * Generates a cryptographically random 6-digit numeric OTP (for local DB tracking or fallback)
+   * Generates a cryptographically random numeric OTP
    */
-  static generateOtp(length: number = 6): string {
+  static generateOtp(length: number = AUTH_CONSTANTS.OTP_DEFAULT_LENGTH): string {
     const array = new Uint32Array(1);
     crypto.getRandomValues(array);
     const num = array[0] % Math.pow(10, length);
@@ -81,12 +84,12 @@ export class TwilioService {
     // 1. Primary Method: Twilio Verify v2 (No sender phone number needed!)
     if (this.verifyServiceSid) {
       try {
-        const url = `https://verify.twilio.com/v2/Services/${this.verifyServiceSid}/Verifications`;
+        const url = `${TWILIO_CONSTANTS.VERIFY_API_BASE_URL}/${this.verifyServiceSid}/Verifications`;
         const basicAuth = btoa(`${this.accountSid}:${this.authToken}`);
 
         const bodyParams = new URLSearchParams();
         bodyParams.append("To", formattedTo);
-        bodyParams.append("Channel", "sms");
+        bodyParams.append("Channel", TWILIO_CONSTANTS.DEFAULT_CHANNEL);
 
         const response = await fetch(url, {
           method: "POST",
@@ -126,7 +129,7 @@ export class TwilioService {
       }
     }
 
-    // 2. Fallback to Programmable SMS if fromNumber is provided
+    // 2. Fallback to Dev Mock
     return {
       success: true,
       sid: `mock_ve_${crypto.randomUUID()}`,
@@ -146,7 +149,7 @@ export class TwilioService {
     const cleanCode = code.trim();
 
     // Dev mock bypass
-    if (cleanCode === "123456" || cleanCode === "1234") {
+    if (cleanCode === AUTH_CONSTANTS.MOCK_OTP_CODE || cleanCode === AUTH_CONSTANTS.MOCK_PIN_CODE) {
       return { success: true, isApproved: true, isMock: true };
     }
 
@@ -160,7 +163,7 @@ export class TwilioService {
     }
 
     try {
-      const url = `https://verify.twilio.com/v2/Services/${this.verifyServiceSid}/VerificationCheck`;
+      const url = `${TWILIO_CONSTANTS.VERIFY_API_BASE_URL}/${this.verifyServiceSid}/VerificationCheck`;
       const basicAuth = btoa(`${this.accountSid}:${this.authToken}`);
 
       const bodyParams = new URLSearchParams();

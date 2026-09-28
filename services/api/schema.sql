@@ -1,9 +1,21 @@
--- Dossier Cloudflare D1 (SQLite) Schema
+-- Dossier Cloudflare D1 (SQLite) Schema Migration
+-- Dual-ID Pattern:
+-- 1. `id`: INTEGER PRIMARY KEY AUTOINCREMENT (Fast internal index, sequential rowid, easy SQL queries)
+-- 2. `public_id`: TEXT UNIQUE NOT NULL (Opaque, tamper-proof, public API & sync identifier)
 
-CREATE TABLE IF NOT EXISTS kiosks (
-    id TEXT PRIMARY KEY,
+DROP TABLE IF EXISTS cases;
+DROP TABLE IF EXISTS dossiers;
+DROP TABLE IF EXISTS sync_items;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS otp_verifications;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS kiosks;
+
+CREATE TABLE kiosks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    owner_id TEXT NOT NULL,
+    owner_public_id TEXT NOT NULL,
     address TEXT,
     phone TEXT,
     upi_vpa TEXT,
@@ -18,9 +30,10 @@ CREATE TABLE IF NOT EXISTS kiosks (
     updated_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    kiosk_id TEXT,
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id TEXT NOT NULL UNIQUE,
+    kiosk_public_id TEXT,
     name TEXT NOT NULL,
     email TEXT,
     mobile TEXT,
@@ -38,12 +51,12 @@ CREATE TABLE IF NOT EXISTS users (
     suspended_reason TEXT,
     deleted_at TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (kiosk_id) REFERENCES kiosks(id) ON DELETE SET NULL
+    updated_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS otp_verifications (
-    id TEXT PRIMARY KEY,
+CREATE TABLE otp_verifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id TEXT NOT NULL UNIQUE,
     mobile TEXT NOT NULL,
     otp_hash TEXT NOT NULL,
     expires_at TEXT NOT NULL,
@@ -52,73 +65,79 @@ CREATE TABLE IF NOT EXISTS otp_verifications (
     created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
+CREATE TABLE sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id TEXT NOT NULL UNIQUE,
+    user_public_id TEXT NOT NULL,
     token TEXT NOT NULL UNIQUE,
     expires_at TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS sync_items (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    kiosk_id TEXT,
+CREATE TABLE sync_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id TEXT NOT NULL UNIQUE,
+    user_public_id TEXT NOT NULL,
+    kiosk_public_id TEXT,
     entity_type TEXT NOT NULL, -- 'customer', 'case', 'exhibit', 'transaction'
     entity_id TEXT NOT NULL,
     action TEXT NOT NULL,      -- 'create', 'update', 'delete'
     payload TEXT NOT NULL,     -- JSON stringified mutation
     client_timestamp TEXT NOT NULL,
-    server_timestamp TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    server_timestamp TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS dossiers (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    kiosk_id TEXT,
+CREATE TABLE dossiers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id TEXT NOT NULL UNIQUE,
+    user_public_id TEXT NOT NULL,
+    kiosk_public_id TEXT,
     full_name TEXT NOT NULL,
     mobile TEXT,
     aadhaar_ref TEXT,
     pan_ref TEXT,
     metadata_json TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    updated_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS cases (
-    id TEXT PRIMARY KEY,
-    dossier_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    kiosk_id TEXT,
+CREATE TABLE cases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id TEXT NOT NULL UNIQUE,
+    dossier_public_id TEXT NOT NULL,
+    user_public_id TEXT NOT NULL,
+    kiosk_public_id TEXT,
     title TEXT NOT NULL,
     category TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'intake',
     total_amount REAL NOT NULL DEFAULT 0.0,
     paid_amount REAL NOT NULL DEFAULT 0.0,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (dossier_id) REFERENCES dossiers(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    updated_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id TEXT PRIMARY KEY,
-    kiosk_id TEXT,
-    user_id TEXT,
-    action TEXT NOT NULL,
-    details TEXT,
-    ip_address TEXT,
-    created_at TEXT NOT NULL
-);
+-- Performance Indexes
+CREATE INDEX idx_kiosks_public_id ON kiosks(public_id);
+CREATE INDEX idx_kiosks_owner ON kiosks(owner_public_id);
+CREATE INDEX idx_kiosks_status ON kiosks(status);
 
--- Indices for performance
-CREATE INDEX IF NOT EXISTS idx_users_kiosk ON users(kiosk_id);
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile);
-CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
-CREATE INDEX IF NOT EXISTS idx_sync_items_kiosk ON sync_items(kiosk_id, server_timestamp);
-CREATE INDEX IF NOT EXISTS idx_cases_dossier ON cases(dossier_id);
-CREATE INDEX IF NOT EXISTS idx_otp_mobile ON otp_verifications(mobile);
+CREATE INDEX idx_users_public_id ON users(public_id);
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_mobile ON users(mobile);
+CREATE INDEX idx_users_kiosk ON users(kiosk_public_id);
+CREATE INDEX idx_users_status ON users(status);
+
+CREATE INDEX idx_otp_mobile ON otp_verifications(mobile);
+CREATE INDEX idx_otp_expires ON otp_verifications(expires_at);
+
+CREATE INDEX idx_sessions_token ON sessions(token);
+CREATE INDEX idx_sessions_user ON sessions(user_public_id);
+
+CREATE INDEX idx_sync_user_time ON sync_items(user_public_id, server_timestamp);
+CREATE INDEX idx_sync_kiosk_time ON sync_items(kiosk_public_id, server_timestamp);
+
+CREATE INDEX idx_dossiers_user ON dossiers(user_public_id);
+CREATE INDEX idx_dossiers_mobile ON dossiers(mobile);
+
+CREATE INDEX idx_cases_dossier ON cases(dossier_public_id);
+CREATE INDEX idx_cases_status ON cases(status);
