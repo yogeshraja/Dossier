@@ -11,6 +11,7 @@ import 'package:dossier/domain/services/media_prep_service.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
+import 'package:dossier/presentation/common_widgets/dossier_resizable_split_view.dart';
 
 class MediaPrepStudioScreen extends ConsumerStatefulWidget {
   const MediaPrepStudioScreen({super.key});
@@ -559,18 +560,25 @@ class _MediaPrepStudioScreenState extends ConsumerState<MediaPrepStudioScreen> w
         }
 
         return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 360,
+          padding: const EdgeInsets.all(16),
+          child: DossierResizableSplitView(
+            direction: Axis.horizontal,
+            responsiveBreakpoint: 800.0,
+            panes: [
+              ResizablePane(
+                id: 'media_controls',
+                initialSize: 380.0,
+                minSize: 280.0,
+                maxSize: 520.0,
                 child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(right: 8),
                   child: controls,
                 ),
               ),
-              const SizedBox(width: 24),
-              Expanded(
+              ResizablePane(
+                id: 'media_preview',
+                isFlexible: true,
+                minSize: 320.0,
                 child: DossierCard(
                   variant: DossierCardVariant.glass,
                   padding: const EdgeInsets.all(16),

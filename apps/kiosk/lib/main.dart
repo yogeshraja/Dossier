@@ -18,6 +18,7 @@ import 'package:dossier/features/settings/screens/settings_screen.dart';
 import 'package:dossier/presentation/screens/splash_screen.dart';
 import 'package:dossier/presentation/common_widgets/dossier_button.dart';
 import 'package:dossier/presentation/common_widgets/dossier_dialog.dart';
+import 'package:dossier/presentation/common_widgets/dossier_resizable_split_view.dart';
 import 'package:dossier/presentation/navigation/collapsible_sidebar.dart';
 import 'package:dossier/presentation/widgets/command_palette_dialog.dart';
 import 'package:dossier/presentation/widgets/kiosk_status_bar.dart';
@@ -401,7 +402,7 @@ class _DossierAdaptiveWorkspace extends ConsumerWidget {
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
 
-        // Auto-collapse billing pane if space is constrained (< 1000px)
+        // Auto-collapse billing pane if space is constrained (< 950px)
         final isWideEnoughForBilling = availableWidth >= 950;
         final isBillingExpanded = ref.watch(isBillingHubExpandedProvider) && isWideEnoughForBilling;
 
@@ -414,26 +415,39 @@ class _DossierAdaptiveWorkspace extends ConsumerWidget {
           return const CaseIntakePane();
         }
 
-        return Row(
-          children: [
-            // Pane 1: Customer Dossiers Directory (Responsive 260px - 300px)
-            SizedBox(
-              width: availableWidth > 1200 ? 300 : 260,
-              child: const DossierListPane(),
-            ),
+        final panes = [
+          // Pane 1: Customer Dossiers Directory (Resizable 220px - 450px)
+          const ResizablePane(
+            id: 'dossier_list',
+            initialSize: 280.0,
+            minSize: 220.0,
+            maxSize: 450.0,
+            child: DossierListPane(),
+          ),
 
-            // Pane 2: Active Case Intake & Stage Progression Stepper
-            const Expanded(
-              child: CaseIntakePane(),
-            ),
+          // Pane 2: Active Case Intake & Stage Progression Stepper (Flexible)
+          const ResizablePane(
+            id: 'case_intake',
+            isFlexible: true,
+            minSize: 320.0,
+            child: CaseIntakePane(),
+          ),
 
-            // Pane 3: Collapsible Billing, Dynamic UPI QR, Thermal Slip & WhatsApp Alerts
-            if (isBillingExpanded)
-              SizedBox(
-                width: availableWidth > 1300 ? 330 : 300,
-                child: const BillingHubPane(),
-              ),
-          ],
+          // Pane 3: Collapsible Billing, Dynamic UPI QR, Thermal Slip & WhatsApp Alerts
+          if (isBillingExpanded)
+            const ResizablePane(
+              id: 'billing_hub',
+              initialSize: 320.0,
+              minSize: 280.0,
+              maxSize: 480.0,
+              child: BillingHubPane(),
+            ),
+        ];
+
+        return DossierResizableSplitView(
+          direction: Axis.horizontal,
+          panes: panes,
+          responsiveBreakpoint: 600.0,
         );
       },
     );

@@ -23,6 +23,7 @@ import 'package:dossier/presentation/common_widgets/dossier_card.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
 import 'package:dossier/presentation/common_widgets/dossier_panel.dart';
 import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
+import 'package:dossier/presentation/common_widgets/dossier_resizable_split_view.dart';
 
 void main() {
   group('Splash Screen Tests', () {
@@ -332,6 +333,55 @@ void main() {
       expect(find.text('PRIMARY'), findsOneWidget);
       expect(find.text('SUCCESS'), findsOneWidget);
       expect(find.text('WARNING'), findsOneWidget);
+    });
+
+    testWidgets('DossierResizableSplitView renders multiple panes and responds to drag', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1000, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      List<double>? reportedSizes;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DossierResizableSplitView(
+              direction: Axis.horizontal,
+              responsiveBreakpoint: 500.0,
+              onSizesChanged: (sizes) => reportedSizes = sizes,
+              panes: const [
+                ResizablePane(
+                  id: 'left_pane',
+                  initialSize: 300.0,
+                  minSize: 200.0,
+                  maxSize: 450.0,
+                  child: Text('Left Pane Content'),
+                ),
+                ResizablePane(
+                  id: 'right_pane',
+                  isFlexible: true,
+                  minSize: 250.0,
+                  child: Text('Right Pane Content'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      expect(find.text('Left Pane Content'), findsOneWidget);
+      expect(find.text('Right Pane Content'), findsOneWidget);
+      expect(find.byType(GestureDetector), findsWidgets);
+
+      // Drag the divider
+      final dividerFinder = find.byType(GestureDetector).at(0);
+      await tester.drag(dividerFinder, const Offset(50, 0));
+      await tester.pump();
+
+      expect(reportedSizes, isNotNull);
+      expect(reportedSizes![0], greaterThan(300.0));
+      await tester.pumpAndSettle();
     });
   });
 

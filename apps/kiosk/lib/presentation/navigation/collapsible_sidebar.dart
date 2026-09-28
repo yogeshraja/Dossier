@@ -31,6 +31,9 @@ class CollapsibleSidebar extends StatefulWidget {
 
 class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
   late bool _isCollapsed;
+  double _expandedWidth = 240.0;
+  bool _isDraggingDivider = false;
+  bool _isHoveringDivider = false;
 
   static const _navItems = [
     (
@@ -77,6 +80,25 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
     });
   }
 
+  void _onDividerDrag(double delta) {
+    setState(() {
+      if (_isCollapsed) {
+        if (delta > 20) {
+          _isCollapsed = false;
+          _expandedWidth = 200.0;
+        }
+      } else {
+        final newWidth = _expandedWidth + delta;
+        if (newWidth < 130) {
+          _isCollapsed = true;
+          _expandedWidth = 240.0;
+        } else {
+          _expandedWidth = newWidth.clamp(160.0, 360.0);
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -85,25 +107,30 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
         (isDark ? const Color(0xFF0F172A) : Colors.white);
     final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
 
-    final sidebarWidth = _isCollapsed ? 76.0 : 240.0;
+    final sidebarWidth = _isCollapsed ? 76.0 : _expandedWidth;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeInOutCubic,
-      width: sidebarWidth,
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        border: Border(
-          right: BorderSide(color: borderColor, width: 1),
-        ),
-      ),
-      clipBehavior: Clip.hardEdge,
-      child: ClipRect(
-        child: SizedBox(
+    return Stack(
+      children: [
+        AnimatedContainer(
+          duration: _isDraggingDivider ? Duration.zero : const Duration(milliseconds: 200),
+          curve: Curves.easeInOutCubic,
           width: sidebarWidth,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+          decoration: BoxDecoration(
+            color: surfaceColor,
+            border: Border(
+              right: BorderSide(
+                color: (_isHoveringDivider || _isDraggingDivider) ? primaryColor : borderColor,
+                width: (_isHoveringDivider || _isDraggingDivider) ? 1.5 : 1.0,
+              ),
+            ),
+          ),
+          clipBehavior: Clip.hardEdge,
+          child: ClipRect(
+            child: SizedBox(
+              width: sidebarWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
               // Header Section
               Container(
                 padding: EdgeInsets.symmetric(horizontal: _isCollapsed ? 8 : 14, vertical: 16),
@@ -406,6 +433,35 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
           ),
         ),
       ),
+    ),
+
+        // Interactive Right Border Resizing Handle
+        Positioned(
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: 8,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.resizeColumn,
+            onEnter: (_) => setState(() => _isHoveringDivider = true),
+            onExit: (_) => setState(() => _isHoveringDivider = false),
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragStart: (_) => setState(() => _isDraggingDivider = true),
+              onHorizontalDragUpdate: (details) => _onDividerDrag(details.delta.dx),
+              onHorizontalDragEnd: (_) => setState(() => _isDraggingDivider = false),
+              onDoubleTap: () => setState(() {
+                if (_isCollapsed) {
+                  _isCollapsed = false;
+                  _expandedWidth = 240.0;
+                } else {
+                  _expandedWidth = _expandedWidth == 240.0 ? 300.0 : 240.0;
+                }
+              }),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

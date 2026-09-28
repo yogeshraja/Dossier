@@ -13,6 +13,7 @@ import 'package:dossier/presentation/common_widgets/dossier_badge.dart';
 import 'package:dossier/presentation/common_widgets/dossier_input_field.dart';
 import 'package:dossier/features/billing_pos/widgets/quick_tender_pad.dart';
 import 'package:dossier/presentation/widgets/animated_thermal_receipt.dart';
+import 'package:dossier/presentation/common_widgets/dossier_resizable_split_view.dart';
 
 class QuickPosScreen extends ConsumerStatefulWidget {
   const QuickPosScreen({super.key});
@@ -204,10 +205,14 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
             );
           }
 
-          return Row(
-            children: [
-              Expanded(
-                flex: 6,
+          return DossierResizableSplitView(
+            direction: Axis.horizontal,
+            responsiveBreakpoint: 900.0,
+            panes: [
+              ResizablePane(
+                id: 'pos_catalog',
+                isFlexible: true,
+                minSize: 360.0,
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
                   child: Column(
@@ -226,9 +231,11 @@ class _QuickPosScreenState extends ConsumerState<QuickPosScreen> {
                   ),
                 ),
               ),
-              VerticalDivider(width: 1, color: Theme.of(context).dividerColor),
-              SizedBox(
-                width: constraints.maxWidth > 1150 ? 370 : 320,
+              ResizablePane(
+                id: 'pos_cart',
+                initialSize: 360.0,
+                minSize: 300.0,
+                maxSize: 520.0,
                 child: Container(
                   color: Theme.of(context).cardTheme.color,
                   padding: const EdgeInsets.all(16),
