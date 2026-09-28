@@ -63,12 +63,6 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
       label: 'Services Catalog',
       tooltip: 'Master Catalog, Pricing & Opt-in Categories',
     ),
-    (
-      icon: Icons.tune_outlined,
-      activeIcon: Icons.tune_rounded,
-      label: 'Settings & Vault',
-      tooltip: 'Kiosk Settings, Cloud Vault & User Profiles',
-    ),
   ];
 
   @override
@@ -280,16 +274,28 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
                 ),
               ),
 
-              // Footer Section (Operator & Theme Mode)
+              // Footer Section (Settings, Operator & Theme Mode)
               Container(
-                padding: EdgeInsets.symmetric(horizontal: _isCollapsed ? 6 : 10, vertical: 12),
+                padding: EdgeInsets.symmetric(horizontal: _isCollapsed ? 6 : 8, vertical: 10),
                 decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: borderColor, width: 1)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (widget.currentOperator != null)
+                    // Settings & Vault placed directly beside/above account name
+                    _SidebarNavItem(
+                      icon: widget.selectedIndex == 5 ? Icons.tune_rounded : Icons.tune_outlined,
+                      label: 'Settings & Vault',
+                      tooltip: 'Workstation Settings, Cloud Vault & User Profiles',
+                      isSelected: widget.selectedIndex == 5,
+                      isCollapsed: _isCollapsed,
+                      onTap: () => widget.onDestinationSelected(5),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Operator / Account Card
+                    if (widget.currentOperator != null) ...[
                       _isCollapsed
                           ? Tooltip(
                               message: 'Operator: ${widget.currentOperator!.fullName} (${widget.currentOperator!.role.label})',
@@ -297,7 +303,7 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
                                 onTap: widget.onShowOperatorMenu,
                                 borderRadius: BorderRadius.circular(10),
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 6),
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
                                   child: CircleAvatar(
                                     radius: 15,
                                     backgroundColor: widget.currentOperator!.role.color,
@@ -309,50 +315,70 @@ class _CollapsibleSidebarState extends State<CollapsibleSidebar> {
                                 ),
                               ),
                             )
-                          : InkWell(
-                              onTap: widget.onShowOperatorMenu,
-                              borderRadius: BorderRadius.circular(10),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: borderColor, width: 0.8),
-                                ),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 14,
-                                      backgroundColor: widget.currentOperator!.role.color,
-                                      child: Text(
-                                        widget.currentOperator!.initials,
-                                        style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                          : Container(
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: borderColor, width: 0.8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: widget.onShowOperatorMenu,
+                                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                        child: Row(
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 13,
+                                              backgroundColor: widget.currentOperator!.role.color,
+                                              child: Text(
+                                                widget.currentOperator!.initials,
+                                                style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    widget.currentOperator!.fullName,
+                                                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                  Text(
+                                                    widget.currentOperator!.role.label,
+                                                    style: TextStyle(fontSize: 9.5, color: widget.currentOperator!.role.color, fontWeight: FontWeight.w600),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const Icon(Icons.unfold_more_rounded, size: 14, color: Colors.grey),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            widget.currentOperator!.fullName,
-                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          Text(
-                                            widget.currentOperator!.role.label,
-                                            style: TextStyle(fontSize: 10, color: widget.currentOperator!.role.color, fontWeight: FontWeight.w600),
-                                          ),
-                                        ],
-                                      ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      widget.selectedIndex == 5 ? Icons.settings_rounded : Icons.settings_outlined,
+                                      size: 16,
+                                      color: widget.selectedIndex == 5 ? primaryColor : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
                                     ),
-                                    const Icon(Icons.unfold_more_rounded, size: 16, color: Colors.grey),
-                                  ],
-                                ),
+                                    tooltip: 'Open Settings',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => widget.onDestinationSelected(5),
+                                  ),
+                                ],
                               ),
                             ),
-                    const SizedBox(height: 8),
+                      const SizedBox(height: 6),
+                    ],
 
                     // Theme Mode Switcher
                     _isCollapsed

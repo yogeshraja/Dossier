@@ -112,6 +112,14 @@ class _KioskWorkstationHomeState extends ConsumerState<KioskWorkstationHome> {
                         ],
                       ),
                     ),
+                    IconButton(
+                      icon: const Icon(Icons.tune_rounded, size: 20, color: Color(0xFF6366F1)),
+                      tooltip: 'Operator Settings & Vault',
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        setState(() => _selectedTabIndex = 5);
+                      },
+                    ),
                   ],
                 ),
               ),
