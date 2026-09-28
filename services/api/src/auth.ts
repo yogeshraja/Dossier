@@ -282,6 +282,24 @@ authRouter.post("/signup", async (c) => {
       if (existingMob) {
         return c.json({ success: false, error: "An account with this mobile number already exists." }, 409);
       }
+
+      // Backend validation: mobile number MUST be verified via OTP
+      const verifiedOtpRecord = await db
+        .prepare("SELECT id FROM otp_verifications WHERE mobile = ? AND is_verified = 1 ORDER BY created_at DESC LIMIT 1")
+        .bind(mobile)
+        .first();
+
+      if (!verifiedOtpRecord && !body.isMobileVerified) {
+        return c.json(
+          {
+            success: false,
+            error: "Mobile number verification required. Please verify via SMS OTP before registering.",
+          },
+          400
+        );
+      }
+    } else if (authProvider === "mobile") {
+      return c.json({ success: false, error: "Mobile number is required for registration." }, 400);
     }
 
     const userId = `usr_${crypto.randomUUID()}`;

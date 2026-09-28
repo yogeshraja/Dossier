@@ -486,12 +486,13 @@ void main() {
       expect(find.text('Welcome Back'), findsOneWidget);
       expect(find.text('Email Address'), findsOneWidget);
 
-      // Switch to Sign Up
+      // Switch to Sign Up (Mobile OTP first)
       await tester.tap(find.text('Sign Up'));
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('Create Account'), findsOneWidget);
-      expect(find.text('Full Name'), findsOneWidget);
+      expect(find.text('Mobile Number'), findsOneWidget);
+      expect(find.text('Send Verification OTP'), findsOneWidget);
     });
 
     testWidgets('AuthScreen renders Operator Shift Login when software is activated', (WidgetTester tester) async {

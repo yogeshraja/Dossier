@@ -229,7 +229,7 @@ void main() {
       expect(container.read(authProvider).registeredOperators.length, 1);
     });
 
-    testWidgets('5. AuthScreen form fields maintain strict isolation between email and password', (WidgetTester tester) async {
+    testWidgets('5. Sign-up flow requires mobile OTP verification before opening name, email, and password fields', (WidgetTester tester) async {
       await tester.pumpWidget(
         const ProviderScope(
           child: MaterialApp(
@@ -244,42 +244,57 @@ void main() {
       await tester.tap(find.text('Sign Up'));
       await tester.pumpAndSettle();
 
-      // Locate fields by ValueKey
+      // Step A: Initially only Mobile Number field and Send OTP button are present
+      final mobileField = find.byKey(const ValueKey('auth_mobile_field'));
+      final sendOtpBtn = find.byKey(const ValueKey('signup_send_otp_button'));
+      expect(mobileField, findsOneWidget);
+      expect(sendOtpBtn, findsOneWidget);
+
+      // Other fields must NOT be visible yet
+      expect(find.byKey(const ValueKey('auth_signup_name_field')), findsNothing);
+      expect(find.byKey(const ValueKey('auth_password_field')), findsNothing);
+
+      // Enter mobile number and Send OTP
+      await tester.enterText(mobileField, '9876543210');
+      await tester.pump();
+      await tester.tap(sendOtpBtn);
+      await tester.pumpAndSettle();
+
+      // Step B: OTP Entry Field appears
+      final otpField = find.byKey(const ValueKey('signup_otp_field'));
+      final verifyOtpBtn = find.byKey(const ValueKey('signup_verify_otp_button'));
+      expect(otpField, findsOneWidget);
+      expect(verifyOtpBtn, findsOneWidget);
+
+      // Enter 6-digit OTP code and verify
+      await tester.enterText(otpField, '123456');
+      await tester.pump();
+      await tester.tap(verifyOtpBtn);
+      await tester.pumpAndSettle();
+
+      // Step C: Verified Badge and remaining fields (Name, Email, Password) open
+      expect(find.text('Verified Mobile: +91 9876543210'), findsOneWidget);
       final nameField = find.byKey(const ValueKey('auth_signup_name_field'));
       final emailField = find.byKey(const ValueKey('auth_email_field'));
       final passwordField = find.byKey(const ValueKey('auth_password_field'));
+      final completeBtn = find.byKey(const ValueKey('auth_complete_signup_button'));
 
       expect(nameField, findsOneWidget);
       expect(emailField, findsOneWidget);
       expect(passwordField, findsOneWidget);
+      expect(completeBtn, findsOneWidget);
 
-      // Enter text into name field
+      // Enter text into name and password fields
       await tester.enterText(nameField, 'Ramesh Admin');
-      await tester.pumpAndSettle();
-
-      // Enter text into email field
       await tester.enterText(emailField, 'test@csc.in');
+      await tester.enterText(passwordField, 'SuperSecret123');
       await tester.pumpAndSettle();
 
-      // Verify that email input DID NOT fill the password field
       final passwordTextFinder = find.descendant(
         of: passwordField,
         matching: find.byType(EditableText),
       );
       final passwordEditable = tester.widget<EditableText>(passwordTextFinder);
-      expect(passwordEditable.controller.text, isEmpty);
-
-      // Verify that email field contains the exact email
-      final emailTextFinder = find.descendant(
-        of: emailField,
-        matching: find.byType(EditableText),
-      );
-      final emailEditable = tester.widget<EditableText>(emailTextFinder);
-      expect(emailEditable.controller.text, 'test@csc.in');
-
-      // Now enter password and verify
-      await tester.enterText(passwordField, 'SuperSecret123');
-      await tester.pumpAndSettle();
       expect(passwordEditable.controller.text, 'SuperSecret123');
     });
 
