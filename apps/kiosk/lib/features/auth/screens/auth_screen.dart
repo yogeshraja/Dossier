@@ -30,11 +30,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _mobileCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
 
-  // Step 2: Kiosk Product Registration State
+  // Step 2: Kiosk Product Registration & FTUE State
+  int _ftueStep = 0;
   final _kioskNameCtrl = TextEditingController();
   final _kioskAddressCtrl = TextEditingController();
+  final _kioskContactCtrl = TextEditingController();
   final _merchantUpiCtrl = TextEditingController();
   final _masterPinCtrl = TextEditingController();
+  final _confirmPinCtrl = TextEditingController();
+  int _receiptWidthMm = 58;
+  bool _autoCashDrawer = true;
 
   // Step 3: Operator Shift PIN State
   String _enteredPin = '';
@@ -53,6 +58,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     _kioskNameCtrl.text = 'Main CSC Document Center';
     _merchantUpiCtrl.text = 'kiosk@oksbi';
     _masterPinCtrl.text = '1234';
+    _confirmPinCtrl.text = '1234';
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = ref.read(authProvider);
@@ -72,8 +78,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     _passwordCtrl.dispose();
     _kioskNameCtrl.dispose();
     _kioskAddressCtrl.dispose();
+    _kioskContactCtrl.dispose();
     _merchantUpiCtrl.dispose();
     _masterPinCtrl.dispose();
+    _confirmPinCtrl.dispose();
     _newOpNameCtrl.dispose();
     _newOpPinCtrl.dispose();
     _newOpPhoneCtrl.dispose();
@@ -137,13 +145,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
   }
 
-  // Handle Kiosk Registration & Software Activation
+  // Handle Kiosk Registration & Software Activation (FTUE Completion)
   Future<void> _handleKioskRegistration() async {
+    final pin = _masterPinCtrl.text.trim();
+    final confirmPin = _confirmPinCtrl.text.trim();
+
+    if (confirmPin.isNotEmpty && pin != confirmPin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Master PINs do not match. Please verify your PIN.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     final success = await ref.read(authProvider.notifier).registerKioskAndActivate(
           kioskName: _kioskNameCtrl.text,
           kioskAddress: _kioskAddressCtrl.text.isNotEmpty ? _kioskAddressCtrl.text : null,
           merchantUpiVpa: _merchantUpiCtrl.text.isNotEmpty ? _merchantUpiCtrl.text : null,
-          pin: _masterPinCtrl.text,
+          pin: pin.isNotEmpty ? pin : '1234',
         );
 
     if (success && mounted) {
@@ -860,7 +881,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 2. Kiosk Setup & Product Registration Card (Once Logged In)
+  // 2. Multi-Step FTUE (First-Time User Experience) Kiosk Setup
   // ─────────────────────────────────────────────────────────────
   Widget _buildKioskSetupCard(AuthState auth, bool isDark) {
     return DossierCard(
@@ -870,14 +891,56 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Header & Sign Out
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Register & Activate Kiosk',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'FTUE ONBOARDING',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'Step ${_ftueStep + 1} of 3',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Kiosk Workstation Setup',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               IconButton(
@@ -889,9 +952,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Authenticated as ${auth.user?.name ?? "Admin"} (${auth.user?.email ?? auth.user?.phone ?? "SSO User"}). Complete product registration to activate features.',
+            'Authenticated as ${auth.user?.name ?? "Admin"}. Complete this 3-step setup to activate your kiosk vault and desk features.',
             style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
           ),
+          const SizedBox(height: 16),
+
+          // Visual Stepper Progress Bar
+          _buildFtueStepperIndicator(isDark),
           const SizedBox(height: 20),
 
           // Error banner
@@ -919,59 +986,397 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             const SizedBox(height: 14),
           ],
 
-          DossierInputField(
-            key: const ValueKey('kiosk_setup_name_field'),
-            label: 'Kiosk / CSC Business Name',
-            hintText: 'e.g. Main CSC Document Center',
-            controller: _kioskNameCtrl,
-            prefixIcon: const Icon(Icons.store_rounded, size: 18),
+          // Active Step Content
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _buildFtueStepContent(auth, isDark),
           ),
-          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
 
-          DossierInputField(
-            key: const ValueKey('kiosk_setup_address_field'),
-            label: 'Center Physical Address',
-            hintText: 'Shop #12, Market Road',
-            controller: _kioskAddressCtrl,
-            prefixIcon: const Icon(Icons.location_on_outlined, size: 18),
-          ),
-          const SizedBox(height: 12),
+  Widget _buildFtueStepperIndicator(bool isDark) {
+    final steps = [
+      {'label': '1. Identity', 'icon': Icons.storefront_rounded},
+      {'label': '2. POS & UPI', 'icon': Icons.point_of_sale_rounded},
+      {'label': '3. Security PIN', 'icon': Icons.shield_rounded},
+    ];
 
-          Row(
-            children: [
-              Expanded(
-                child: DossierInputField(
-                  key: const ValueKey('kiosk_setup_upi_field'),
-                  label: 'Merchant UPI VPA',
-                  hintText: 'kiosk@oksbi',
-                  controller: _merchantUpiCtrl,
-                  prefixIcon: const Icon(Icons.qr_code_rounded, size: 18),
-                ),
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: List.generate(steps.length, (stepIdx) {
+        final isCurrent = _ftueStep == stepIdx;
+        final isPassed = _ftueStep > stepIdx;
+
+        return InkWell(
+          onTap: () {
+            if (isPassed || stepIdx <= _ftueStep) {
+              setState(() => _ftueStep = stepIdx);
+            }
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isCurrent
+                  ? const Color(0xFF6366F1)
+                  : (isPassed
+                      ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                      : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9))),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isCurrent
+                    ? const Color(0xFF6366F1)
+                    : (isPassed ? const Color(0xFF10B981) : Colors.transparent),
+                width: 1,
               ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isPassed ? Icons.check_circle_rounded : steps[stepIdx]['icon'] as IconData,
+                  size: 14,
+                  color: isCurrent
+                      ? Colors.white
+                      : (isPassed
+                          ? const Color(0xFF10B981)
+                          : (isDark ? Colors.grey[400] : Colors.grey[600])),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  steps[stepIdx]['label'] as String,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                    color: isCurrent
+                        ? Colors.white
+                        : (isPassed
+                            ? const Color(0xFF10B981)
+                            : (isDark ? Colors.grey[300] : Colors.grey[700])),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildFtueStepContent(AuthState auth, bool isDark) {
+    switch (_ftueStep) {
+      case 0:
+        return _buildFtueStep0Identity(auth, isDark);
+      case 1:
+        return _buildFtueStep1PosHardware(auth, isDark);
+      case 2:
+      default:
+        return _buildFtueStep2Security(auth, isDark);
+    }
+  }
+
+  // ── Step 0: Center Identity & Branding ──
+  Widget _buildFtueStep0Identity(AuthState auth, bool isDark) {
+    return Column(
+      key: const ValueKey('ftue_step_0'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Center Name & Physical Address',
+          style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'These details appear on printed thermal customer receipts and payment slips.',
+          style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+        ),
+        const SizedBox(height: 16),
+
+        DossierInputField(
+          key: const ValueKey('kiosk_setup_name_field'),
+          label: 'Kiosk / CSC Business Name',
+          hintText: 'e.g. Main CSC Document Center',
+          controller: _kioskNameCtrl,
+          prefixIcon: const Icon(Icons.store_rounded, size: 18),
+        ),
+        const SizedBox(height: 12),
+
+        DossierInputField(
+          key: const ValueKey('kiosk_setup_address_field'),
+          label: 'Center Street Address',
+          hintText: 'Shop #12, Market Road, Near Bus Stand',
+          controller: _kioskAddressCtrl,
+          prefixIcon: const Icon(Icons.location_on_outlined, size: 18),
+        ),
+        const SizedBox(height: 12),
+
+        DossierInputField(
+          key: const ValueKey('kiosk_setup_contact_field'),
+          label: 'Customer Support / Helpline Phone (Optional)',
+          hintText: '+91 98765 43210',
+          controller: _kioskContactCtrl,
+          prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+          keyboardType: TextInputType.phone,
+        ),
+        const SizedBox(height: 24),
+
+        SizedBox(
+          width: double.infinity,
+          child: DossierButton(
+            text: 'Continue to POS Setup →',
+            icon: Icons.arrow_forward_rounded,
+            onPressed: () {
+              if (_kioskNameCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter a business / kiosk name.')),
+                );
+                return;
+              }
+              setState(() => _ftueStep = 1);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Step 1: Touch POS & Hardware Configuration ──
+  Widget _buildFtueStep1PosHardware(AuthState auth, bool isDark) {
+    return Column(
+      key: const ValueKey('ftue_step_1'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Touch POS & Payments Setup',
+          style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Configure dynamic UPI QR payments and your connected ESC/POS thermal printer hardware.',
+          style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+        ),
+        const SizedBox(height: 16),
+
+        DossierInputField(
+          key: const ValueKey('kiosk_setup_upi_field'),
+          label: 'Merchant UPI VPA ID (For Instant Customer QR Payments)',
+          hintText: 'kiosk@oksbi or 9876543210@paytm',
+          controller: _merchantUpiCtrl,
+          prefixIcon: const Icon(Icons.qr_code_rounded, size: 18),
+        ),
+        const SizedBox(height: 16),
+
+        // Thermal Receipt Paper Width
+        Text(
+          'Thermal Receipt Printer Width',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.grey[300] : Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('58mm (Compact - 32 Chars)', style: TextStyle(fontSize: 12)),
+              selected: _receiptWidthMm == 58,
+              onSelected: (val) {
+                if (val) setState(() => _receiptWidthMm = 58);
+              },
+            ),
+            ChoiceChip(
+              label: const Text('80mm (Standard - 48 Chars)', style: TextStyle(fontSize: 12)),
+              selected: _receiptWidthMm == 80,
+              onSelected: (val) {
+                if (val) setState(() => _receiptWidthMm = 80);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // Auto Cash Drawer Kick
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.point_of_sale_rounded, size: 20, color: const Color(0xFF6366F1)),
               const SizedBox(width: 12),
               Expanded(
-                child: DossierInputField(
-                  key: const ValueKey('kiosk_setup_pin_field'),
-                  label: 'Master 4-Digit PIN',
-                  hintText: '1234',
-                  controller: _masterPinCtrl,
-                  prefixIcon: const Icon(Icons.pin_rounded, size: 18),
-                  keyboardType: TextInputType.number,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Auto Cash Drawer Kick', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    Text('Send ESC p pulse after cash sales', style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[600])),
+                  ],
                 ),
+              ),
+              Switch(
+                value: _autoCashDrawer,
+                activeThumbColor: const Color(0xFF6366F1),
+                onChanged: (val) => setState(() => _autoCashDrawer = val),
               ),
             ],
           ),
-          const SizedBox(height: 24),
+        ),
+        const SizedBox(height: 24),
 
-          SizedBox(
-            width: double.infinity,
-            child: DossierButton(
-              text: 'Complete Setup & Unlock Kiosk',
-              icon: Icons.verified_user_rounded,
-              isLoading: auth.isLoading,
-              onPressed: _handleKioskRegistration,
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => setState(() => _ftueStep = 0),
+              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+              label: const Text('Back'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DossierButton(
+                text: 'Continue to Security PIN →',
+                icon: Icons.arrow_forward_rounded,
+                onPressed: () => setState(() => _ftueStep = 2),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Step 2: Master Security PIN & Launch ──
+  Widget _buildFtueStep2Security(AuthState auth, bool isDark) {
+    return Column(
+      key: const ValueKey('ftue_step_2'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Master Admin PIN & Launch',
+          style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Set a 4-digit Master Admin PIN to protect operator provisioning and tenant settings.',
+          style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
+        ),
+        const SizedBox(height: 16),
+
+        Row(
+          children: [
+            Expanded(
+              child: DossierInputField(
+                key: const ValueKey('kiosk_setup_pin_field'),
+                label: 'Master 4-Digit PIN',
+                hintText: '1234',
+                controller: _masterPinCtrl,
+                obscureText: true,
+                prefixIcon: const Icon(Icons.pin_rounded, size: 18),
+                keyboardType: TextInputType.number,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DossierInputField(
+                key: const ValueKey('kiosk_setup_pin_confirm_field'),
+                label: 'Confirm 4-Digit PIN',
+                hintText: '1234',
+                controller: _confirmPinCtrl,
+                obscureText: true,
+                prefixIcon: const Icon(Icons.verified_user_outlined, size: 18),
+                keyboardType: TextInputType.number,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Summary Preview Card
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
             ),
           ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.check_circle_outline_rounded, size: 16, color: Color(0xFF10B981)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Configuration Summary',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _buildSummaryRow('Kiosk Center:', _kioskNameCtrl.text, isDark),
+              _buildSummaryRow('Merchant UPI:', _merchantUpiCtrl.text, isDark),
+              _buildSummaryRow('Printer Paper:', '${_receiptWidthMm}mm ESC/POS', isDark),
+              _buildSummaryRow('Admin Account:', auth.user?.name ?? 'Admin', isDark),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => setState(() => _ftueStep = 1),
+              icon: const Icon(Icons.arrow_back_rounded, size: 16),
+              label: const Text('Back'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DossierButton(
+                text: 'Complete Setup & Launch 🚀',
+                icon: Icons.rocket_launch_rounded,
+                isLoading: auth.isLoading,
+                onPressed: _handleKioskRegistration,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[600])),
+          Text(value.isNotEmpty ? value : 'Default', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
         ],
       ),
     );

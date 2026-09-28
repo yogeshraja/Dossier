@@ -281,5 +281,137 @@ void main() {
       await tester.pumpAndSettle();
       expect(passwordEditable.controller.text, 'SuperSecret123');
     });
+
+    testWidgets('6. FTUE Wizard navigates seamlessly across all 3 onboarding steps', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      // Set user as logged in but not software activated (enters FTUE mode)
+      container.read(authProvider.notifier).state = const AuthState(
+        user: AuthUser(
+          id: 'usr-new-owner',
+          name: 'Priya Sharma',
+          email: 'priya@csc.in',
+          role: 'admin',
+          hasKiosk: false,
+        ),
+        isAuthenticated: true,
+        isSoftwareActivated: false,
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: AuthScreen(),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Step 1: Center Identity
+      expect(find.text('FTUE ONBOARDING'), findsOneWidget);
+      expect(find.text('Step 1 of 3'), findsOneWidget);
+      expect(find.text('Center Name & Physical Address'), findsOneWidget);
+      expect(find.byKey(const ValueKey('kiosk_setup_name_field')), findsOneWidget);
+
+      // Tap Continue to Step 2
+      final step1Btn = find.text('Continue to POS Setup →');
+      await tester.ensureVisible(step1Btn);
+      await tester.tap(step1Btn);
+      await tester.pumpAndSettle();
+
+      // Step 2: Touch POS & Hardware
+      expect(find.text('Step 2 of 3'), findsOneWidget);
+      expect(find.text('Touch POS & Payments Setup'), findsOneWidget);
+      expect(find.byKey(const ValueKey('kiosk_setup_upi_field')), findsOneWidget);
+      expect(find.text('58mm (Compact - 32 Chars)'), findsOneWidget);
+
+      // Switch paper width chip
+      final chip80 = find.text('80mm (Standard - 48 Chars)');
+      await tester.ensureVisible(chip80);
+      await tester.tap(chip80);
+      await tester.pumpAndSettle();
+
+      // Tap Continue to Step 3
+      final step2Btn = find.text('Continue to Security PIN →');
+      await tester.ensureVisible(step2Btn);
+      await tester.tap(step2Btn);
+      await tester.pumpAndSettle();
+
+      // Step 3: Master Security PIN & Launch
+      expect(find.text('Step 3 of 3'), findsOneWidget);
+      expect(find.text('Master Admin PIN & Launch'), findsOneWidget);
+      expect(find.byKey(const ValueKey('kiosk_setup_pin_field')), findsOneWidget);
+      expect(find.byKey(const ValueKey('kiosk_setup_pin_confirm_field')), findsOneWidget);
+      expect(find.text('Configuration Summary'), findsOneWidget);
+      expect(find.text('Complete Setup & Launch 🚀'), findsOneWidget);
+    });
+
+    test('7. Returning sign-in preserves active kiosk status and bypasses FTUE setup', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.path == '/api/v1/auth/signin') {
+          return http.Response(
+            jsonEncode({
+              'success': true,
+              'token': 'jwt-returning-session',
+              'hasKiosk': true,
+              'user': {
+                'id': 'usr-existing-admin',
+                'name': 'Aarav Gupta',
+                'email': 'aarav@csc.in',
+                'role': 'admin',
+                'hasKiosk': true,
+              },
+              'kiosk': {
+                'id': 'ksk-99',
+                'name': 'Aarav CSC Document Center',
+              },
+              'operators': [
+                {
+                  'id': 'op-aarav',
+                  'name': 'Aarav Gupta',
+                  'role': 'admin',
+                  'pin': '1234',
+                }
+              ],
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response('Not Found', 404);
+      });
+
+      final container = ProviderContainer(
+        overrides: [
+          serverAuthApiServiceProvider.overrideWithValue(
+            ServerAuthApiService(client: mockClient),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final notifier = container.read(authProvider.notifier);
+      final strategy = AuthStrategyFactory.createEmailStrategy(
+        email: 'aarav@csc.in',
+        password: 'Password123',
+      );
+
+      final loginSuccess = await notifier.authenticateWithStrategy(strategy, isSignUp: false);
+      expect(loginSuccess, isTrue);
+
+      final state = container.read(authProvider);
+      // Verify returning user has kiosk activated and does not enter FTUE
+      expect(state.isUserLoggedIn, isTrue);
+      expect(state.isSoftwareActivated, isTrue);
+      expect(state.adminOperator?.fullName, 'Aarav Gupta');
+    });
   });
 }
+

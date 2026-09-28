@@ -125,18 +125,39 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     if (result.isSuccess && result.user != null) {
       final user = result.user!;
-      final hasKiosk = result.hasKiosk;
+      final effectiveHasKiosk = isSignUp
+          ? result.hasKiosk
+          : (result.hasKiosk || state.isSoftwareActivated || state.registeredOperators.isNotEmpty || user.hasKiosk);
 
-      List<KioskOperator> ops = result.operators;
-      KioskOperator? adminOp;
-      if (hasKiosk && ops.isNotEmpty) {
-        adminOp = ops.first;
+      List<KioskOperator> ops = result.operators.isNotEmpty
+          ? result.operators
+          : (state.registeredOperators.isNotEmpty ? state.registeredOperators : <KioskOperator>[]);
+
+      KioskOperator? adminOp = result.operators.isNotEmpty
+          ? result.operators.first
+          : (state.adminOperator ??
+              (effectiveHasKiosk
+                  ? KioskOperator(
+                      id: user.id,
+                      fullName: user.name,
+                      phone: user.phone ?? '',
+                      email: user.email,
+                      role: OperatorRole.admin,
+                      passwordHash: '',
+                      pin: '1234',
+                      kioskName: 'Main CSC Center',
+                      createdAt: DateTime.now(),
+                    )
+                  : null));
+
+      if (effectiveHasKiosk && adminOp != null && !ops.any((o) => o.id == adminOp.id)) {
+        ops = [adminOp, ...ops];
       }
 
       state = state.copyWith(
         user: user,
         isAuthenticated: true,
-        isSoftwareActivated: hasKiosk,
+        isSoftwareActivated: effectiveHasKiosk,
         adminOperator: adminOp,
         registeredOperators: ops,
         serverAuthToken: result.token,
@@ -144,7 +165,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         clearErrorMessage: true,
       );
 
-      if (hasKiosk && adminOp != null) {
+      if (effectiveHasKiosk && adminOp != null) {
         _updateOperatorState(adminOp);
       }
 
