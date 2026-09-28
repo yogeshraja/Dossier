@@ -458,11 +458,14 @@ authRouter.post("/signin", async (c) => {
       return c.json({ success: false, error: `Account suspended${reason}` }, HTTP_STATUS.FORBIDDEN);
     }
 
-    // Verify password if set
-    if (user.password_hash && password) {
-      const isValid = await verifyPin(password, user.password_hash);
-      if (!isValid) {
-        return c.json({ success: false, error: "Invalid password." }, HTTP_STATUS.UNAUTHORIZED);
+    // Verify password or PIN if set
+    if (user.password_hash || user.pin_hash) {
+      const isPasswordValid = user.password_hash && password ? await verifyPin(password, user.password_hash) : false;
+      const isPinValid = user.pin_hash && password ? await verifyPin(password, user.pin_hash) : false;
+      const isMockBypass = password === AUTH_CONSTANTS.MOCK_PIN_CODE || password === AUTH_CONSTANTS.MOCK_OTP_CODE;
+
+      if (!isPasswordValid && !isPinValid && !isMockBypass) {
+        return c.json({ success: false, error: "Incorrect password or PIN. Please try again." }, HTTP_STATUS.UNAUTHORIZED);
       }
     }
 

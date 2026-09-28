@@ -40,8 +40,11 @@ class EmailPasswordAuthStrategy extends BaseAuthStrategy {
     if (!emailRegex.hasMatch(cleanEmail)) {
       return 'Please enter a valid email address.';
     }
-    if (password.trim().length < 6) {
-      return 'Password must be at least 6 characters long.';
+    if (password.trim().isEmpty) {
+      return 'Please enter your password or 4-digit PIN.';
+    }
+    if (password.trim().length < 4) {
+      return 'Password/PIN must be at least 4 characters long.';
     }
     return null;
   }

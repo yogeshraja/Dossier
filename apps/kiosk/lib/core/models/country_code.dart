@@ -19,7 +19,12 @@ class CountryCode {
   });
 
   String formatFullNumber(String rawDigits) {
-    final cleanDigits = rawDigits.replaceAll(RegExp(r'[^\d]'), '');
+    final trimmed = rawDigits.trim();
+    if (trimmed.startsWith('+')) {
+      final clean = trimmed.replaceAll(RegExp(r'[^\d+]'), '');
+      return clean;
+    }
+    final cleanDigits = trimmed.replaceAll(RegExp(r'[^\d]'), '');
     final cleanDial = dialCode.replaceAll(RegExp(r'[^\d+]'), '');
     if (cleanDigits.startsWith(cleanDial.replaceAll('+', ''))) {
       return '+$cleanDigits';

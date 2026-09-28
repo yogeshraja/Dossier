@@ -49,8 +49,11 @@ class PhonePasswordAuthStrategy extends BaseAuthStrategy {
     if (digitCount < 7 || digitCount > 15) {
       return 'Please enter a valid mobile number.';
     }
-    if (password.trim().length < 6) {
-      return 'Password must be at least 6 characters long.';
+    if (password.trim().isEmpty) {
+      return 'Please enter your password or 4-digit PIN.';
+    }
+    if (password.trim().length < 4) {
+      return 'Password/PIN must be at least 4 characters long.';
     }
     return null;
   }
